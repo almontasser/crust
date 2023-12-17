@@ -23,8 +23,7 @@ impl CodeGen {
         // for node in self.nodes.clone() {
         //     let register = self.generate_node(node);
         // }
-        let reg = self.generate_node(self.nodes[0].clone());
-        self.printint(reg);
+        self.generate_node(self.nodes[0].clone());
 
         self.postamble();
 
@@ -62,6 +61,11 @@ impl CodeGen {
                     }
                     _ => panic!("Unexpected token {:?}", operator),
                 }
+            }
+            Node::PrintStmt { expr } => {
+                let register = self.generate_node(*expr);
+                self.printint(register);
+                register
             }
         }
     }

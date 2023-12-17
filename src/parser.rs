@@ -1,3 +1,5 @@
+use core::panic;
+
 use crate::{
     ast::Node,
     lexer::{Token, TokenType},
@@ -20,7 +22,7 @@ impl Parser {
 
     pub fn parse(&mut self) -> &Vec<Node> {
         while !self.is_at_end() {
-            let node = self.expression();
+            let node = self.statement();
             self.nodes.push(node);
         }
 
@@ -29,6 +31,26 @@ impl Parser {
 
     fn is_at_end(&self) -> bool {
         self.peek().token_type == TokenType::EOF
+    }
+
+    fn statement(&mut self) -> Node {
+        // expect print
+        if self.match_token(vec![TokenType::Print]) {
+            return self.print_statement();
+        } else {
+            panic!(
+                "Expected print at line {} column {}",
+                self.peek().line,
+                self.peek().column
+            );
+        }
+    }
+
+    fn print_statement(&mut self) -> Node {
+        let expr = self.expression();
+        Node::PrintStmt {
+            expr: Box::new(expr),
+        }
     }
 
     fn expression(&mut self) -> Node {

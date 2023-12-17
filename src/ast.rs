@@ -14,4 +14,7 @@ pub enum Node {
     LiteralExpr {
         value: Literal,
     },
+    PrintStmt {
+        expr: Box<Node>,
+    },
 }
