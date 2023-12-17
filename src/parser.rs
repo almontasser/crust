@@ -20,7 +20,7 @@ impl Parser {
 
     pub fn parse(&mut self) -> &Vec<Node> {
         while !self.is_at_end() {
-            let node = self.addition_expr();
+            let node = self.expression();
             self.nodes.push(node);
         }
 
@@ -29,6 +29,19 @@ impl Parser {
 
     fn is_at_end(&self) -> bool {
         self.peek().token_type == TokenType::EOF
+    }
+
+    fn expression(&mut self) -> Node {
+        let node = self.addition_expr();
+        // expect semicolon
+        if !self.match_token(vec![TokenType::SemiColon]) {
+            panic!(
+                "Expected semicolon at line {} column {}",
+                self.peek().line,
+                self.peek().column
+            );
+        }
+        node
     }
 
     fn multiplication_expr(&mut self) -> Node {
