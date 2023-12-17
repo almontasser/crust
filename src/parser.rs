@@ -47,7 +47,10 @@ impl Parser {
     }
 
     fn print_statement(&mut self) -> Node {
+        self.expect(vec![TokenType::LeftParen]);
         let expr = self.expression();
+        self.expect(vec![TokenType::RightParen]);
+        self.expect(vec![TokenType::SemiColon]);
         Node::PrintStmt {
             expr: Box::new(expr),
         }
@@ -56,13 +59,6 @@ impl Parser {
     fn expression(&mut self) -> Node {
         let node = self.addition_expr();
         // expect semicolon
-        if !self.match_token(vec![TokenType::SemiColon]) {
-            panic!(
-                "Expected semicolon at line {} column {}",
-                self.peek().line,
-                self.peek().column
-            );
-        }
         node
     }
 
@@ -121,6 +117,21 @@ impl Parser {
         }
 
         false
+    }
+
+    fn expect(&mut self, tokens: Vec<TokenType>) -> Token {
+        for token in &tokens {
+            if self.check(*token) {
+                return self.advance();
+            }
+        }
+
+        panic!(
+            "Expected {:?} at line {} column {}",
+            tokens,
+            self.peek().line,
+            self.peek().column
+        );
     }
 
     fn check(&self, token_type: TokenType) -> bool {
