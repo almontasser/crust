@@ -97,7 +97,7 @@ impl Parser {
     }
 
     fn peek(&self) -> Token {
-        self.tokens[self.current]
+        self.tokens[self.current].clone()
     }
 
     fn advance(&mut self) -> Token {
@@ -109,6 +109,6 @@ impl Parser {
     }
 
     fn previous(&self) -> Token {
-        self.tokens[self.current - 1]
+        self.tokens[self.current - 1].clone()
     }
 }

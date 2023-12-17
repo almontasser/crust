@@ -3,9 +3,10 @@ pub enum Literal {
     Integer(u64),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub token_type: TokenType,
+    pub lexeme: Option<String>,
     pub line: usize,
     pub column: usize,
     pub value: Option<Literal>,
@@ -52,6 +53,7 @@ impl Lexer {
 
         self.tokens.push(Token {
             token_type: TokenType::EOF,
+            lexeme: None,
             line: self.line,
             column: self.column,
             value: None,
@@ -96,6 +98,7 @@ impl Lexer {
         let text = &self.source[self.start..self.current];
         self.tokens.push(Token {
             token_type: token_type,
+            lexeme: Some(text.to_string()),
             line: self.line,
             column: self.column,
             value: none,
