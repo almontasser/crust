@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 #[derive(Debug, Clone, Copy)]
 pub enum Literal {
     Integer(u64),
@@ -19,7 +21,11 @@ pub enum TokenType {
     Mul,
     Div,
 
+    Identifier,
     Integer,
+
+    // Keywords
+    Print,
 
     EOF,
 }
@@ -31,6 +37,7 @@ pub struct Lexer {
     current: usize,
     line: usize,
     column: usize,
+    keywords: HashMap<String, TokenType>,
 }
 
 impl Lexer {
@@ -42,6 +49,11 @@ impl Lexer {
             current: 0,
             line: 1,
             column: 1,
+            keywords: {
+                let mut keywords = HashMap::new();
+                keywords.insert(String::from("print"), TokenType::Print);
+                keywords
+            },
         }
     }
 
@@ -80,6 +92,7 @@ impl Lexer {
                 self.column = 1;
             }
             c if c.is_digit(10) => self.number(),
+            c if c.is_alphabetic() || c == '_' => self.identifier(),
             _ => panic!("Unexpected character: {}", c),
         }
     }
@@ -122,5 +135,16 @@ impl Lexer {
         }
 
         self.source.chars().nth(self.current).unwrap()
+    }
+
+    fn identifier(&mut self) {
+        while self.peek().is_alphanumeric() || self.peek() == '_' {
+            self.advance();
+        }
+
+        let text = &self.source[self.start..self.current];
+        let token_type = self.keywords.get(text).unwrap_or(&TokenType::Identifier);
+
+        self.add_token(*token_type);
     }
 }
