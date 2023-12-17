@@ -67,6 +67,7 @@ impl CodeGen {
     }
 
     fn preamble(&mut self) {
+        self.free_all_registers();
         self.assembly.push_str("\t.text\n");
         self.assembly.push_str(".LC0:\n");
         self.assembly.push_str(".string\t\"%d\\n\"\n");
