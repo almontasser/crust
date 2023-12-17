@@ -20,10 +20,9 @@ impl CodeGen {
     pub fn generate(&mut self) -> String {
         self.preamble();
 
-        // for node in self.nodes.clone() {
-        //     let register = self.generate_node(node);
-        // }
-        self.generate_node(self.nodes[0].clone());
+        for node in self.nodes.clone() {
+            self.generate_node(node);
+        }
 
         self.postamble();
 
