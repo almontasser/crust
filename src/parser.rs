@@ -9,6 +9,7 @@ pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
     nodes: Vec<Node>,
+    global_variables: Vec<String>,
 }
 
 impl Parser {
@@ -17,6 +18,7 @@ impl Parser {
             tokens,
             current: 0,
             nodes: Vec::new(),
+            global_variables: Vec::new(),
         }
     }
 
@@ -37,12 +39,42 @@ impl Parser {
         // expect print
         if self.match_token(vec![TokenType::Print]) {
             return self.print_statement();
+        } else if self.match_token(vec![TokenType::Let]) {
+            return self.var_decl();
+        } else if self.match_token(vec![TokenType::Identifier]) {
+            return self.assignment();
         } else {
             panic!(
                 "Expected print at line {} column {}",
                 self.peek().line,
                 self.peek().column
             );
+        }
+    }
+
+    fn var_decl(&mut self) -> Node {
+        let identifier = self.expect(vec![TokenType::Identifier]);
+        self.expect(vec![TokenType::SemiColon]);
+        self.add_global_variable(identifier.clone());
+        Node::GlobalVar { identifier }
+    }
+
+    fn assignment(&mut self) -> Node {
+        let identifier = self.previous();
+        // make sure the identifier is declared
+        let ident_lexeme = identifier.lexeme.clone().unwrap();
+        if !self.global_variables.contains(&ident_lexeme) {
+            panic!(
+                "Variable {} not declared at line {} column {}",
+                ident_lexeme, identifier.line, identifier.column
+            );
+        }
+        self.expect(vec![TokenType::Assign]);
+        let expr = self.expression();
+        self.expect(vec![TokenType::SemiColon]);
+        Node::AssignStmt {
+            identifier,
+            expr: Box::new(expr),
         }
     }
 
@@ -96,6 +128,10 @@ impl Parser {
 
     fn primary(&mut self) -> Node {
         if self.match_token(vec![TokenType::Integer]) {
+            return Node::LiteralExpr {
+                value: self.previous().value.unwrap(),
+            };
+        } else if self.match_token(vec![TokenType::Identifier]) {
             return Node::LiteralExpr {
                 value: self.previous().value.unwrap(),
             };
@@ -156,5 +192,13 @@ impl Parser {
 
     fn previous(&self) -> Token {
         self.tokens[self.current - 1].clone()
+    }
+
+    fn add_global_variable(&mut self, identifier: Token) {
+        if let Some(lexeme) = identifier.lexeme.clone() {
+            if !self.global_variables.contains(&lexeme) {
+                self.global_variables.push(lexeme);
+            }
+        }
     }
 }

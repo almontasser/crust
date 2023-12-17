@@ -17,4 +17,11 @@ pub enum Node {
     PrintStmt {
         expr: Box<Node>,
     },
+    GlobalVar {
+        identifier: Token,
+    },
+    AssignStmt {
+        identifier: Token,
+        expr: Box<Node>,
+    },
 }

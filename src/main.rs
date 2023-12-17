@@ -9,13 +9,13 @@ mod parser;
 
 fn main() {
     let source = String::from(
-        "print(12 * 3);
-    print (
-       18 - 2
-          * 4); print
-    (1 + 2 +
-      9 - 5/2 + 3*5
-    );",
+        "
+let fred;
+let jim;
+fred= 5;
+jim= 12;
+print(fred + jim);
+    ",
     );
     let mut lexer = lexer::Lexer::new(source);
     let tokens = lexer.scan_tokens();
