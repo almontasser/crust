@@ -89,17 +89,16 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Node {
-        let node = self.addition_expr();
-        // expect semicolon
+        let node = self.equality();
         node
     }
 
-    fn multiplication_expr(&mut self) -> Node {
-        let mut node = self.primary();
+    fn equality(&mut self) -> Node {
+        let mut node = self.comparison();
 
-        while self.match_token(vec![TokenType::Mul, TokenType::Div]) {
+        while self.match_token(vec![TokenType::Equal, TokenType::NotEqual]) {
             let operator = self.previous();
-            let right = self.primary();
+            let right = self.comparison();
             node = Node::BinaryExpr {
                 left: Box::new(node),
                 operator,
@@ -110,12 +109,33 @@ impl Parser {
         node
     }
 
-    fn addition_expr(&mut self) -> Node {
-        let mut node = self.multiplication_expr();
+    fn comparison(&mut self) -> Node {
+        let mut node = self.term();
+
+        while self.match_token(vec![
+            TokenType::LessThan,
+            TokenType::LessThanOrEqual,
+            TokenType::GreaterThan,
+            TokenType::GreaterThanOrEqual,
+        ]) {
+            let operator = self.previous();
+            let right = self.term();
+            node = Node::BinaryExpr {
+                left: Box::new(node),
+                operator,
+                right: Box::new(right),
+            };
+        }
+
+        node
+    }
+
+    fn term(&mut self) -> Node {
+        let mut node = self.factor();
 
         while self.match_token(vec![TokenType::Add, TokenType::Sub]) {
             let operator = self.previous();
-            let right = self.multiplication_expr();
+            let right = self.factor();
             node = Node::BinaryExpr {
                 left: Box::new(node),
                 operator,
@@ -124,6 +144,35 @@ impl Parser {
         }
 
         node
+    }
+
+    fn factor(&mut self) -> Node {
+        let mut node = self.unary();
+
+        while self.match_token(vec![TokenType::Mul, TokenType::Div]) {
+            let operator = self.previous();
+            let right = self.unary();
+            node = Node::BinaryExpr {
+                left: Box::new(node),
+                operator,
+                right: Box::new(right),
+            };
+        }
+
+        node
+    }
+
+    fn unary(&mut self) -> Node {
+        if self.match_token(vec![TokenType::Sub]) {
+            let operator = self.previous();
+            let right = self.unary();
+            return Node::UnaryExpr {
+                operator,
+                right: Box::new(right),
+            };
+        }
+
+        self.primary()
     }
 
     fn primary(&mut self) -> Node {
@@ -163,10 +212,11 @@ impl Parser {
         }
 
         panic!(
-            "Expected {:?} at line {} column {}",
+            "Expected {:?} at line {} column {}, got {:?}",
             tokens,
             self.peek().line,
-            self.peek().column
+            self.peek().column,
+            self.peek().token_type
         );
     }
 

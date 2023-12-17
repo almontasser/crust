@@ -1,4 +1,7 @@
-use crate::{ast::Node, lexer::Literal};
+use crate::{
+    ast::Node,
+    lexer::{Literal, TokenType},
+};
 
 pub struct CodeGen {
     nodes: Vec<Node>,
@@ -7,6 +10,7 @@ pub struct CodeGen {
 }
 
 const REGISTER_NAMES: [&str; 4] = ["%r8", "%r9", "%r10", "%r11"];
+const BYTE_REGISTER_NAMES: [&str; 4] = ["%r8b", "%r9b", "%r10b", "%r11b"];
 
 impl CodeGen {
     pub fn new(nodes: Vec<Node>) -> Self {
@@ -44,10 +48,16 @@ impl CodeGen {
                 let right = self.generate_node(*right);
 
                 match operator.token_type {
-                    crate::lexer::TokenType::Add => self.add(left, right),
-                    crate::lexer::TokenType::Sub => self.subtract(left, right),
-                    crate::lexer::TokenType::Mul => self.multiply(left, right),
-                    crate::lexer::TokenType::Div => self.divide(left, right),
+                    TokenType::Add => self.add(left, right),
+                    TokenType::Sub => self.subtract(left, right),
+                    TokenType::Mul => self.multiply(left, right),
+                    TokenType::Div => self.divide(left, right),
+                    TokenType::Equal => self.equal(left, right),
+                    TokenType::NotEqual => self.not_equal(left, right),
+                    TokenType::LessThan => self.less_than(left, right),
+                    TokenType::LessThanOrEqual => self.less_than_or_equal(left, right),
+                    TokenType::GreaterThan => self.greater_than(left, right),
+                    TokenType::GreaterThanOrEqual => self.greater_than_or_equal(left, right),
                     _ => panic!("Unexpected token {:?}", operator),
                 }
             }
@@ -55,7 +65,7 @@ impl CodeGen {
                 let right = self.generate_node(*right);
 
                 match operator.token_type {
-                    crate::lexer::TokenType::Sub => {
+                    TokenType::Sub => {
                         self.load(0);
                         self.subtract(0, right)
                     }
@@ -65,7 +75,7 @@ impl CodeGen {
             Node::PrintStmt { expr } => {
                 let register = self.generate_node(*expr);
                 self.printint(register);
-                register
+                0
             }
             Node::GlobalVar { identifier } => {
                 self.define_global(identifier.lexeme.unwrap());
@@ -74,7 +84,8 @@ impl CodeGen {
             Node::AssignStmt { identifier, expr } => {
                 let register = self.generate_node(*expr);
                 self.store(register, identifier.lexeme.unwrap());
-                register
+                self.free_register(register);
+                0
             }
         }
     }
@@ -203,5 +214,44 @@ impl CodeGen {
         for i in 0..self.registers.len() {
             self.free_register(i);
         }
+    }
+
+    fn compare(&mut self, left: usize, right: usize, instruction: &str) -> usize {
+        self.assembly.push_str(&format!(
+            "\tcmpq\t{}, {}\n",
+            REGISTER_NAMES[right], REGISTER_NAMES[left]
+        ));
+        self.assembly.push_str(&format!(
+            "\t{} {}\n",
+            instruction, BYTE_REGISTER_NAMES[right]
+        ));
+        self.assembly
+            .push_str(&format!("\tandq\t$255, {}\n", REGISTER_NAMES[right]));
+        self.free_register(left);
+        right
+    }
+
+    fn equal(&mut self, left: usize, right: usize) -> usize {
+        self.compare(left, right, "sete")
+    }
+
+    fn not_equal(&mut self, left: usize, right: usize) -> usize {
+        self.compare(left, right, "setne")
+    }
+
+    fn less_than(&mut self, left: usize, right: usize) -> usize {
+        self.compare(left, right, "setl")
+    }
+
+    fn less_than_or_equal(&mut self, left: usize, right: usize) -> usize {
+        self.compare(left, right, "setle")
+    }
+
+    fn greater_than(&mut self, left: usize, right: usize) -> usize {
+        self.compare(left, right, "setg")
+    }
+
+    fn greater_than_or_equal(&mut self, left: usize, right: usize) -> usize {
+        self.compare(left, right, "setge")
     }
 }

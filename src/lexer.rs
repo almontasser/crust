@@ -17,11 +17,6 @@ pub struct Token {
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TokenType {
-    Add,
-    Sub,
-    Mul,
-    Div,
-
     Identifier,
     Integer,
 
@@ -31,10 +26,22 @@ pub enum TokenType {
     Print,
 
     // Single-character tokens
+    Add,
+    Sub,
+    Mul,
+    Div,
     LeftParen,
     RightParen,
     SemiColon,
     Assign,
+    LessThan,
+    GreaterThan,
+
+    // Double-character tokens
+    Equal,
+    NotEqual,
+    LessThanOrEqual,
+    GreaterThanOrEqual,
 
     EOF,
 }
@@ -100,7 +107,34 @@ impl Lexer {
             '(' => self.add_token(TokenType::LeftParen),
             ')' => self.add_token(TokenType::RightParen),
             ';' => self.add_token(TokenType::SemiColon),
-            '=' => self.add_token(TokenType::Assign),
+            '=' => {
+                if self.match_char('=') {
+                    self.add_token(TokenType::Equal);
+                } else {
+                    self.add_token(TokenType::Assign);
+                }
+            }
+            '!' => {
+                if self.match_char('=') {
+                    self.add_token(TokenType::NotEqual);
+                } else {
+                    panic!("Unexpected character: {}", c);
+                }
+            }
+            '<' => {
+                if self.match_char('=') {
+                    self.add_token(TokenType::LessThanOrEqual);
+                } else {
+                    self.add_token(TokenType::LessThan);
+                }
+            }
+            '>' => {
+                if self.match_char('=') {
+                    self.add_token(TokenType::GreaterThanOrEqual);
+                } else {
+                    self.add_token(TokenType::GreaterThan);
+                }
+            }
             ' ' | '\t' | '\r' => {}
             '\n' => {
                 self.line += 1;
@@ -115,6 +149,7 @@ impl Lexer {
     fn advance(&mut self) -> char {
         let c = self.source.chars().nth(self.current).unwrap();
         self.current += 1;
+        self.column += 1;
         c
     }
 
@@ -165,5 +200,19 @@ impl Lexer {
         } else {
             self.add_token(*token_type);
         }
+    }
+
+    fn match_char(&mut self, arg: char) -> bool {
+        if self.is_at_end() {
+            return false;
+        }
+
+        if self.source.chars().nth(self.current).unwrap() != arg {
+            return false;
+        }
+
+        self.current += 1;
+        self.column += 1;
+        true
     }
 }
