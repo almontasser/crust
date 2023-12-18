@@ -60,6 +60,8 @@ impl Parser {
             return self.assignment();
         } else if self.match_token(vec![TokenType::If]) {
             return self.if_statement();
+        } else if self.match_token(vec![TokenType::While]) {
+            return self.while_statement();
         } else {
             panic!(
                 "Expected print at line {} column {}",
@@ -301,6 +303,35 @@ impl Parser {
             if !self.global_variables.contains(&lexeme) {
                 self.global_variables.push(lexeme);
             }
+        }
+    }
+
+    fn while_statement(&mut self) -> Node {
+        self.expect(vec![TokenType::LeftParen]);
+        let expr = self.expression();
+        match &expr {
+            Node::BinaryExpr { operator, .. } => {
+                if operator.token_type != TokenType::Equal
+                    && operator.token_type != TokenType::NotEqual
+                    && operator.token_type != TokenType::LessThan
+                    && operator.token_type != TokenType::LessThanOrEqual
+                    && operator.token_type != TokenType::GreaterThan
+                    && operator.token_type != TokenType::GreaterThanOrEqual
+                {
+                    panic!(
+                        "Expected comparison operator at line {} column {}",
+                        operator.line, operator.column
+                    );
+                }
+            }
+            _ => panic!("Expected comparison operator"),
+        }
+        self.expect(vec![TokenType::RightParen]);
+        let body = self.compound_statement();
+
+        Node::WhileStmt {
+            condition: Box::new(expr),
+            body: Box::new(body),
         }
     }
 }

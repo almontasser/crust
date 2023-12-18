@@ -102,6 +102,7 @@ impl CodeGen {
                 }
                 0
             }
+            Node::WhileStmt { condition, body } => self.while_stmt(condition, body),
         }
     }
 
@@ -334,6 +335,42 @@ impl CodeGen {
             self.generate_node(*else_branch);
             self.free_all_registers();
         }
+
+        // generate the end label
+        self.generate_label(end_label);
+        0
+    }
+
+    fn while_stmt(&mut self, condition: Box<Node>, body: Box<Node>) -> usize {
+        let start_label = self.label();
+        let end_label = self.label();
+
+        self.generate_label(start_label);
+
+        let (left_reg, right_reg, operation) = match *condition {
+            Node::BinaryExpr {
+                left,
+                operator,
+                right,
+            } => {
+                let left_reg = self.generate_node(*left);
+                let right_reg = self.generate_node(*right);
+
+                (left_reg, right_reg, operator.token_type)
+            }
+            _ => panic!("Unexpected token {:?}", condition),
+        };
+
+        // zero jump to the end label
+        self.compare_and_jump(operation, left_reg, right_reg, end_label);
+        self.free_all_registers();
+
+        // generate the body code
+        self.generate_node(*body);
+        self.free_all_registers();
+
+        // unconditional jump to the start label
+        self.jump(start_label);
 
         // generate the end label
         self.generate_label(end_label);

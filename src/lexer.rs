@@ -26,6 +26,7 @@ pub enum TokenType {
     Int,
     Let,
     Print,
+    While,
 
     // Single-character tokens
     Add,
@@ -76,6 +77,7 @@ impl Lexer {
                 keywords.insert(String::from("int"), TokenType::Int);
                 keywords.insert(String::from("let"), TokenType::Let);
                 keywords.insert(String::from("print"), TokenType::Print);
+                keywords.insert(String::from("while"), TokenType::While);
                 keywords
             },
         }

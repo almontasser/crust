@@ -32,4 +32,8 @@ pub enum Node {
         then_branch: Box<Node>,
         else_branch: Option<Box<Node>>,
     },
+    WhileStmt {
+        condition: Box<Node>,
+        body: Box<Node>,
+    },
 }
