@@ -22,6 +22,7 @@ pub enum TokenType {
 
     // Keywords
     Else,
+    For,
     If,
     Int,
     Let,
@@ -73,6 +74,7 @@ impl Lexer {
             keywords: {
                 let mut keywords = HashMap::new();
                 keywords.insert(String::from("else"), TokenType::Else);
+                keywords.insert(String::from("for"), TokenType::For);
                 keywords.insert(String::from("if"), TokenType::If);
                 keywords.insert(String::from("int"), TokenType::Int);
                 keywords.insert(String::from("let"), TokenType::Let);

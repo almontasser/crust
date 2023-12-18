@@ -2,7 +2,7 @@ use core::panic;
 
 use crate::{
     ast::Node,
-    lexer::{Token, TokenType},
+    lexer::{Literal, Token, TokenType},
 };
 
 pub struct Parser {
@@ -41,7 +41,13 @@ impl Parser {
         self.expect(vec![TokenType::LeftBrace]);
 
         while !self.check(TokenType::RightBrace) && !self.is_at_end() {
-            let node = self.statement();
+            let node = self.single_statement();
+            match node {
+                Node::PrintStmt { .. } | Node::AssignStmt { .. } | Node::GlobalVar { .. } => {
+                    self.expect(vec![TokenType::SemiColon]);
+                }
+                _ => {}
+            }
             nodes.push(node);
         }
 
@@ -50,7 +56,7 @@ impl Parser {
         Node::CompoundStmt { statements: nodes }
     }
 
-    fn statement(&mut self) -> Node {
+    fn single_statement(&mut self) -> Node {
         // expect print
         if self.match_token(vec![TokenType::Print]) {
             return self.print_statement();
@@ -62,18 +68,20 @@ impl Parser {
             return self.if_statement();
         } else if self.match_token(vec![TokenType::While]) {
             return self.while_statement();
+        } else if self.match_token(vec![TokenType::For]) {
+            return self.for_statement();
         } else {
             panic!(
-                "Expected print at line {} column {}",
+                "Expected print at line {} column {} got {:?}",
                 self.peek().line,
-                self.peek().column
+                self.peek().column,
+                self.peek().token_type
             );
         }
     }
 
     fn var_decl(&mut self) -> Node {
         let identifier = self.expect(vec![TokenType::Identifier]);
-        self.expect(vec![TokenType::SemiColon]);
         self.add_global_variable(identifier.clone());
         Node::GlobalVar { identifier }
     }
@@ -90,7 +98,6 @@ impl Parser {
         }
         self.expect(vec![TokenType::Assign]);
         let expr = self.expression();
-        self.expect(vec![TokenType::SemiColon]);
         Node::AssignStmt {
             identifier,
             expr: Box::new(expr),
@@ -136,7 +143,6 @@ impl Parser {
         self.expect(vec![TokenType::LeftParen]);
         let expr = self.expression();
         self.expect(vec![TokenType::RightParen]);
-        self.expect(vec![TokenType::SemiColon]);
         Node::PrintStmt {
             expr: Box::new(expr),
         }
@@ -333,5 +339,57 @@ impl Parser {
             condition: Box::new(expr),
             body: Box::new(body),
         }
+    }
+
+    fn for_statement(&mut self) -> Node {
+        self.expect(vec![TokenType::LeftParen]);
+        let initializer = if self.match_token(vec![TokenType::SemiColon]) {
+            None
+        // } else if self.match_token(vec![TokenType::Let]) {
+        //     Some(self.var_decl())
+        } else if self.match_token(vec![TokenType::Identifier]) {
+            let node = self.assignment();
+            self.expect(vec![TokenType::SemiColon]);
+            Some(node)
+        } else {
+            panic!("Expected identifier");
+        };
+
+        let condition = if self.check(TokenType::SemiColon) {
+            Node::LiteralExpr {
+                value: Literal::Integer(1),
+            }
+        } else {
+            self.expression()
+        };
+        self.expect(vec![TokenType::SemiColon]);
+
+        let increment = if self.check(TokenType::RightParen) {
+            None
+        } else {
+            Some(self.single_statement())
+        };
+        self.expect(vec![TokenType::RightParen]);
+
+        let mut body = self.compound_statement();
+
+        if let Some(increment) = increment {
+            body = Node::CompoundStmt {
+                statements: vec![body, increment],
+            };
+        }
+
+        body = Node::WhileStmt {
+            condition: Box::new(condition),
+            body: Box::new(body),
+        };
+
+        if let Some(initializer) = initializer {
+            body = Node::CompoundStmt {
+                statements: vec![initializer, body],
+            };
+        }
+
+        body
     }
 }
