@@ -24,4 +24,12 @@ pub enum Node {
         identifier: Token,
         expr: Box<Node>,
     },
+    CompoundStmt {
+        statements: Vec<Node>,
+    },
+    IfStmt {
+        condition: Box<Node>,
+        then_branch: Box<Node>,
+        else_branch: Option<Box<Node>>,
+    },
 }

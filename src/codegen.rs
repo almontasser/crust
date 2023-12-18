@@ -7,6 +7,7 @@ pub struct CodeGen {
     nodes: Vec<Node>,
     assembly: String,
     registers: [bool; 4],
+    label_count: usize,
 }
 
 const REGISTER_NAMES: [&str; 4] = ["%r8", "%r9", "%r10", "%r11"];
@@ -18,6 +19,7 @@ impl CodeGen {
             nodes,
             assembly: String::new(),
             registers: [false; 4],
+            label_count: 0,
         }
     }
 
@@ -52,12 +54,14 @@ impl CodeGen {
                     TokenType::Sub => self.subtract(left, right),
                     TokenType::Mul => self.multiply(left, right),
                     TokenType::Div => self.divide(left, right),
-                    TokenType::Equal => self.equal(left, right),
-                    TokenType::NotEqual => self.not_equal(left, right),
-                    TokenType::LessThan => self.less_than(left, right),
-                    TokenType::LessThanOrEqual => self.less_than_or_equal(left, right),
-                    TokenType::GreaterThan => self.greater_than(left, right),
-                    TokenType::GreaterThanOrEqual => self.greater_than_or_equal(left, right),
+                    TokenType::Equal
+                    | TokenType::NotEqual
+                    | TokenType::LessThan
+                    | TokenType::LessThanOrEqual
+                    | TokenType::GreaterThan
+                    | TokenType::GreaterThanOrEqual => {
+                        self.compare_and_set(operator.token_type, left, right)
+                    }
                     _ => panic!("Unexpected token {:?}", operator),
                 }
             }
@@ -85,6 +89,17 @@ impl CodeGen {
                 let register = self.generate_node(*expr);
                 self.store(register, identifier.lexeme.unwrap());
                 self.free_register(register);
+                0
+            }
+            Node::IfStmt {
+                condition,
+                then_branch,
+                else_branch,
+            } => self.if_stmt(condition, then_branch, else_branch),
+            Node::CompoundStmt { statements } => {
+                for statement in statements {
+                    self.generate_node(statement);
+                }
                 0
             }
         }
@@ -216,42 +231,112 @@ impl CodeGen {
         }
     }
 
-    fn compare(&mut self, left: usize, right: usize, instruction: &str) -> usize {
+    fn compare_and_jump(&mut self, operation: TokenType, left: usize, right: usize, label: usize) {
+        // get inverted jump instructions
+        let jump_instruction = match operation {
+            TokenType::Equal => "jne",
+            TokenType::NotEqual => "je",
+            TokenType::LessThan => "jge",
+            TokenType::LessThanOrEqual => "jg",
+            TokenType::GreaterThan => "jle",
+            TokenType::GreaterThanOrEqual => "jl",
+            _ => panic!("Unexpected token {:?}", operation),
+        };
+
+        self.assembly.push_str(&format!(
+            "\tcmpq\t{}, {}\n",
+            REGISTER_NAMES[right], REGISTER_NAMES[left]
+        ));
+        self.assembly
+            .push_str(&format!("\t{} L{}\n", jump_instruction, label));
+        self.free_all_registers();
+    }
+
+    fn compare_and_set(&mut self, operation: TokenType, left: usize, right: usize) -> usize {
+        // get set instructions
+        let set_instruction = match operation {
+            TokenType::Equal => "sete",
+            TokenType::NotEqual => "setne",
+            TokenType::LessThan => "setl",
+            TokenType::LessThanOrEqual => "setle",
+            TokenType::GreaterThan => "setg",
+            TokenType::GreaterThanOrEqual => "setge",
+            _ => panic!("Unexpected token {:?}", operation),
+        };
+
         self.assembly.push_str(&format!(
             "\tcmpq\t{}, {}\n",
             REGISTER_NAMES[right], REGISTER_NAMES[left]
         ));
         self.assembly.push_str(&format!(
             "\t{} {}\n",
-            instruction, BYTE_REGISTER_NAMES[right]
+            set_instruction, BYTE_REGISTER_NAMES[right]
         ));
-        self.assembly
-            .push_str(&format!("\tandq\t$255, {}\n", REGISTER_NAMES[right]));
+        self.assembly.push_str(&format!(
+            "\tmovzbq\t{}, {}\n",
+            BYTE_REGISTER_NAMES[right], REGISTER_NAMES[right]
+        ));
         self.free_register(left);
         right
     }
 
-    fn equal(&mut self, left: usize, right: usize) -> usize {
-        self.compare(left, right, "sete")
+    fn label(&mut self) -> usize {
+        self.label_count += 1;
+        self.label_count
     }
 
-    fn not_equal(&mut self, left: usize, right: usize) -> usize {
-        self.compare(left, right, "setne")
+    fn generate_label(&mut self, label: usize) {
+        self.assembly.push_str(&format!("L{}:\n", label));
     }
 
-    fn less_than(&mut self, left: usize, right: usize) -> usize {
-        self.compare(left, right, "setl")
+    fn jump(&mut self, label: usize) {
+        self.assembly.push_str(&format!("\tjmp\tL{}\n", label));
     }
 
-    fn less_than_or_equal(&mut self, left: usize, right: usize) -> usize {
-        self.compare(left, right, "setle")
-    }
+    fn if_stmt(
+        &mut self,
+        condition: Box<Node>,
+        then_branch: Box<Node>,
+        else_branch: Option<Box<Node>>,
+    ) -> usize {
+        let false_label = self.label();
+        let end_label = self.label();
 
-    fn greater_than(&mut self, left: usize, right: usize) -> usize {
-        self.compare(left, right, "setg")
-    }
+        let (left_reg, right_reg, operation) = match *condition {
+            Node::BinaryExpr {
+                left,
+                operator,
+                right,
+            } => {
+                let left_reg = self.generate_node(*left);
+                let right_reg = self.generate_node(*right);
 
-    fn greater_than_or_equal(&mut self, left: usize, right: usize) -> usize {
-        self.compare(left, right, "setge")
+                (left_reg, right_reg, operator.token_type)
+            }
+            _ => panic!("Unexpected token {:?}", condition),
+        };
+
+        // zero jump to the false label
+        self.compare_and_jump(operation, left_reg, right_reg, false_label);
+        self.free_all_registers();
+
+        // generate the then branch code
+        self.generate_node(*then_branch);
+        self.free_all_registers();
+        // unconditional jump to the end label
+        self.jump(end_label);
+
+        // generate the false label
+        self.generate_label(false_label);
+
+        // generate the else branch code
+        if let Some(else_branch) = else_branch {
+            self.generate_node(*else_branch);
+            self.free_all_registers();
+        }
+
+        // generate the end label
+        self.generate_label(end_label);
+        0
     }
 }

@@ -24,7 +24,7 @@ impl Parser {
 
     pub fn parse(&mut self) -> &Vec<Node> {
         while !self.is_at_end() {
-            let node = self.statement();
+            let node = self.compound_statement();
             self.nodes.push(node);
         }
 
@@ -35,6 +35,21 @@ impl Parser {
         self.peek().token_type == TokenType::EOF
     }
 
+    fn compound_statement(&mut self) -> Node {
+        let mut nodes = Vec::new();
+
+        self.expect(vec![TokenType::LeftBrace]);
+
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+            let node = self.statement();
+            nodes.push(node);
+        }
+
+        self.expect(vec![TokenType::RightBrace]);
+
+        Node::CompoundStmt { statements: nodes }
+    }
+
     fn statement(&mut self) -> Node {
         // expect print
         if self.match_token(vec![TokenType::Print]) {
@@ -43,6 +58,8 @@ impl Parser {
             return self.var_decl();
         } else if self.match_token(vec![TokenType::Identifier]) {
             return self.assignment();
+        } else if self.match_token(vec![TokenType::If]) {
+            return self.if_statement();
         } else {
             panic!(
                 "Expected print at line {} column {}",
@@ -75,6 +92,41 @@ impl Parser {
         Node::AssignStmt {
             identifier,
             expr: Box::new(expr),
+        }
+    }
+
+    fn if_statement(&mut self) -> Node {
+        self.expect(vec![TokenType::LeftParen]);
+        let expr = self.expression();
+        match &expr {
+            Node::BinaryExpr { operator, .. } => {
+                if operator.token_type != TokenType::Equal
+                    && operator.token_type != TokenType::NotEqual
+                    && operator.token_type != TokenType::LessThan
+                    && operator.token_type != TokenType::LessThanOrEqual
+                    && operator.token_type != TokenType::GreaterThan
+                    && operator.token_type != TokenType::GreaterThanOrEqual
+                {
+                    panic!(
+                        "Expected comparison operator at line {} column {}",
+                        operator.line, operator.column
+                    );
+                }
+            }
+            _ => panic!("Expected comparison operator"),
+        }
+        self.expect(vec![TokenType::RightParen]);
+        let then_branch = self.compound_statement();
+        let else_branch = if self.match_token(vec![TokenType::Else]) {
+            Some(Box::new(self.compound_statement()))
+        } else {
+            None
+        };
+
+        Node::IfStmt {
+            condition: Box::new(expr),
+            then_branch: Box::new(then_branch),
+            else_branch,
         }
     }
 

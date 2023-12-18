@@ -21,6 +21,8 @@ pub enum TokenType {
     Integer,
 
     // Keywords
+    Else,
+    If,
     Int,
     Let,
     Print,
@@ -32,6 +34,8 @@ pub enum TokenType {
     Div,
     LeftParen,
     RightParen,
+    LeftBrace,
+    RightBrace,
     SemiColon,
     Assign,
     LessThan,
@@ -67,6 +71,8 @@ impl Lexer {
             column: 1,
             keywords: {
                 let mut keywords = HashMap::new();
+                keywords.insert(String::from("else"), TokenType::Else);
+                keywords.insert(String::from("if"), TokenType::If);
                 keywords.insert(String::from("int"), TokenType::Int);
                 keywords.insert(String::from("let"), TokenType::Let);
                 keywords.insert(String::from("print"), TokenType::Print);
@@ -106,6 +112,8 @@ impl Lexer {
             '/' => self.add_token(TokenType::Div),
             '(' => self.add_token(TokenType::LeftParen),
             ')' => self.add_token(TokenType::RightParen),
+            '{' => self.add_token(TokenType::LeftBrace),
+            '}' => self.add_token(TokenType::RightBrace),
             ';' => self.add_token(TokenType::SemiColon),
             '=' => {
                 if self.match_char('=') {
