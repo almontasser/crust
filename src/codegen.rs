@@ -30,8 +30,6 @@ impl CodeGen {
             self.generate_node(node);
         }
 
-        self.postamble();
-
         self.assembly.clone()
     }
 
@@ -103,6 +101,7 @@ impl CodeGen {
                 0
             }
             Node::WhileStmt { condition, body } => self.while_stmt(condition, body),
+            Node::FnDecl { identifier, body } => self.function(identifier, body),
         }
     }
 
@@ -124,11 +123,6 @@ impl CodeGen {
         self.assembly.push_str("\tnop\n");
         self.assembly.push_str("\tleave\n");
         self.assembly.push_str("\tret\n\n");
-        self.assembly.push_str("\t.global main\n");
-        self.assembly.push_str("\t.type\tmain, @function\n");
-        self.assembly.push_str("main:\n");
-        self.assembly.push_str("\tpushq\t%rbp\n");
-        self.assembly.push_str("\tmovq\t%rsp, %rbp\n");
     }
 
     fn postamble(&mut self) {
@@ -375,5 +369,26 @@ impl CodeGen {
         // generate the end label
         self.generate_label(end_label);
         0
+    }
+
+    fn function(&mut self, identifier: crate::lexer::Token, body: Box<Node>) -> usize {
+        self.function_preamble(identifier.lexeme.unwrap());
+        self.generate_node(*body);
+        self.function_postamble();
+        0
+    }
+
+    fn function_preamble(&mut self, name: String) {
+        self.assembly.push_str("\t.global main\n");
+        self.assembly.push_str("\t.type\tmain, @function\n");
+        self.assembly.push_str("main:\n");
+        self.assembly.push_str("\tpushq\t%rbp\n");
+        self.assembly.push_str("\tmovq\t%rsp, %rbp\n");
+    }
+
+    fn function_postamble(&mut self) {
+        self.assembly.push_str(&format!("\tmovl\t$0, %eax\n"));
+        self.assembly.push_str(&format!("\tpopq\t%rbp\n"));
+        self.assembly.push_str(&format!("\tret\n"));
     }
 }

@@ -36,4 +36,8 @@ pub enum Node {
         condition: Box<Node>,
         body: Box<Node>,
     },
+    FnDecl {
+        identifier: Token,
+        body: Box<Node>,
+    },
 }

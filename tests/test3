@@ -1,4 +1,4 @@
-{
+fn main() {
   let x;
   x= 1;     print(x);
   x= x + 1; print(x);

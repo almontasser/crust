@@ -1,4 +1,4 @@
-{
+fn main() {
   let fred;
   let jim;
   fred= 5;

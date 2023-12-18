@@ -24,7 +24,7 @@ impl Parser {
 
     pub fn parse(&mut self) -> &Vec<Node> {
         while !self.is_at_end() {
-            let node = self.compound_statement();
+            let node = self.fn_decl();
             self.nodes.push(node);
         }
 
@@ -70,6 +70,8 @@ impl Parser {
             return self.while_statement();
         } else if self.match_token(vec![TokenType::For]) {
             return self.for_statement();
+        } else if self.match_token(vec![TokenType::Fn]) {
+            return self.fn_decl();
         } else {
             panic!(
                 "Expected print at line {} column {} got {:?}",
@@ -391,5 +393,21 @@ impl Parser {
         }
 
         body
+    }
+
+    fn fn_decl(&mut self) -> Node {
+        self.expect(vec![TokenType::Fn]);
+        let identifier = self.expect(vec![TokenType::Identifier]);
+        self.add_global_variable(identifier.clone());
+        self.expect(vec![TokenType::LeftParen]);
+        // TODO: parse parameters
+        self.expect(vec![TokenType::RightParen]);
+        // TODO: parse return type
+        let body = self.compound_statement();
+
+        Node::FnDecl {
+            identifier,
+            body: Box::new(body),
+        }
     }
 }
