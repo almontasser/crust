@@ -6,6 +6,7 @@ mod ast;
 mod codegen;
 mod lexer;
 mod parser;
+mod types;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
