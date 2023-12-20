@@ -1,5 +1,6 @@
 use crate::{
     lexer::{Literal, Token},
+    parser::Symbol,
     types::Type,
 };
 
@@ -46,6 +47,16 @@ pub enum Node {
     FnDecl {
         identifier: Token,
         body: Box<Node>,
+        return_type: Option<Type>,
+    },
+    FnCall {
+        identifier: Token,
+        expr: Box<Node>,
+        ty: Type,
+    },
+    ReturnStmt {
+        expr: Box<Node>,
+        fn_name: Symbol,
     },
 }
 
@@ -62,6 +73,8 @@ impl Node {
             Node::IfStmt { .. } => None,
             Node::WhileStmt { .. } => None,
             Node::FnDecl { .. } => None,
+            Node::FnCall { ty, .. } => Some(ty.clone()),
+            Node::ReturnStmt { .. } => None,
         }
     }
 
@@ -77,6 +90,8 @@ impl Node {
             Node::IfStmt { .. } => {}
             Node::WhileStmt { .. } => {}
             Node::FnDecl { .. } => {}
+            Node::FnCall { ty: t, .. } => *t = ty,
+            Node::ReturnStmt { .. } => {}
         }
     }
 }

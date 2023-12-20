@@ -1,0 +1,12 @@
+fn fred(): int {
+  return 20;
+}
+
+fn main(): int {
+  let result: int;
+  print(10);
+  result= fred(15);
+  print(result);
+  print(fred(15)+10);
+  return 0;
+}

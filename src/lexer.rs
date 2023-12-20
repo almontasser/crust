@@ -4,6 +4,7 @@ use std::collections::HashMap;
 pub enum Literal {
     Integer(u64),
     U8(u8),
+    U32(u32),
     Identifier(String),
 }
 
@@ -29,7 +30,9 @@ pub enum TokenType {
     Int,
     Let,
     Print,
+    Return,
     U8,
+    U32,
     While,
 
     // Single-character tokens
@@ -86,7 +89,9 @@ impl Lexer {
                 keywords.insert(String::from("int"), TokenType::Int);
                 keywords.insert(String::from("let"), TokenType::Let);
                 keywords.insert(String::from("print"), TokenType::Print);
+                keywords.insert(String::from("return"), TokenType::Return);
                 keywords.insert(String::from("u8"), TokenType::U8);
+                keywords.insert(String::from("u32"), TokenType::U32);
                 keywords.insert(String::from("while"), TokenType::While);
                 keywords
             },

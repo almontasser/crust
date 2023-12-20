@@ -14,9 +14,10 @@ pub enum SymbolType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Symbol {
-    identifier: Token,
-    structure: SymbolType,
-    ty: Type,
+    pub identifier: Token,
+    pub structure: SymbolType,
+    pub ty: Option<Type>,
+    pub end_label: Option<String>,
 }
 
 pub struct Parser {
@@ -24,6 +25,7 @@ pub struct Parser {
     current: usize,
     nodes: Vec<Node>,
     symbols: Vec<Symbol>,
+    current_fn: Option<Symbol>,
 }
 
 impl Parser {
@@ -33,6 +35,7 @@ impl Parser {
             current: 0,
             nodes: Vec::new(),
             symbols: Vec::new(),
+            current_fn: None,
         }
     }
 
@@ -57,7 +60,11 @@ impl Parser {
         while !self.check(TokenType::RightBrace) && !self.is_at_end() {
             let node = self.single_statement();
             match node {
-                Node::PrintStmt { .. } | Node::AssignStmt { .. } | Node::GlobalVar { .. } => {
+                Node::PrintStmt { .. }
+                | Node::AssignStmt { .. }
+                | Node::GlobalVar { .. }
+                | Node::FnCall { .. }
+                | Node::ReturnStmt { .. } => {
                     self.expect(vec![TokenType::SemiColon]);
                 }
                 _ => {}
@@ -86,6 +93,8 @@ impl Parser {
             return self.for_statement();
         } else if self.match_token(vec![TokenType::Fn]) {
             return self.fn_decl();
+        } else if self.match_token(vec![TokenType::Return]) {
+            return self.return_statement();
         } else {
             panic!(
                 "Expected print at line {} column {} got {:?}",
@@ -105,27 +114,48 @@ impl Parser {
     }
 
     fn var_decl(&mut self) -> Node {
-        // let ty = self.parse_type(self.previous());
+        // let ty = self.parse_type(self.previous(1));
         let identifier = self.expect(vec![TokenType::Identifier]);
         self.expect(vec![TokenType::Colon]);
         let ty_token = self.expect(vec![TokenType::Int, TokenType::U8]);
         let ty = self.parse_type(ty_token);
-        self.add_symbol(identifier.clone(), SymbolType::Variable, ty.clone());
+        self.add_symbol(identifier.clone(), SymbolType::Variable, ty.clone(), None);
         Node::GlobalVar { identifier, ty }
     }
 
     fn assignment(&mut self) -> Node {
-        let identifier = self.previous();
+        let identifier = self.previous(1);
         // make sure the identifier is declared
-        let symbol = self.find_symbol(identifier.clone()).unwrap();
-        if !self.symbols.contains(&symbol) {
+        let symbol = self.find_symbol(identifier.clone());
+
+        if symbol.is_none() {
             panic!(
-                "Variable {} not declared at line {} column {}",
+                "Identifier {} not declared at line {} column {}",
                 identifier.lexeme.clone().unwrap(),
                 identifier.line,
                 identifier.column
             );
         }
+        let symbol = symbol.unwrap();
+
+        if self.match_token(vec![TokenType::LeftParen]) {
+            if symbol.structure != SymbolType::Function {
+                panic!(
+                    "Expected function at line {} column {}",
+                    identifier.line, identifier.column
+                );
+            }
+
+            return self.function_call();
+        }
+
+        if symbol.structure != SymbolType::Variable {
+            panic!(
+                "Expected variable at line {} column {}",
+                identifier.line, identifier.column
+            );
+        }
+
         self.expect(vec![TokenType::Assign]);
         let expr = self.expression();
 
@@ -134,15 +164,15 @@ impl Parser {
         let mut widen_right = false;
         if !self.type_compatible(
             expr.ty().unwrap(),
-            symbol.ty,
+            symbol.ty.unwrap(),
             true,
             &mut widen_left,
             &mut widen_right,
         ) {
             panic!(
                 "Incompatible types at line {} column {}",
-                self.previous().line,
-                self.previous().column
+                self.previous(1).line,
+                self.previous(1).column
             );
         }
 
@@ -153,8 +183,8 @@ impl Parser {
                     operator: Token {
                         token_type: TokenType::Widen,
                         lexeme: None,
-                        line: self.previous().line,
-                        column: self.previous().column,
+                        line: self.previous(1).line,
+                        column: self.previous(1).column,
                         value: None,
                     },
                     right: Box::new(expr.clone()),
@@ -220,8 +250,8 @@ impl Parser {
         ) {
             panic!(
                 "Incompatible types at line {} column {}",
-                self.previous().line,
-                self.previous().column
+                self.previous(1).line,
+                self.previous(1).column
             );
         }
 
@@ -231,8 +261,8 @@ impl Parser {
                     operator: Token {
                         token_type: TokenType::Widen,
                         lexeme: None,
-                        line: self.previous().line,
-                        column: self.previous().column,
+                        line: self.previous(1).line,
+                        column: self.previous(1).column,
                         value: None,
                     },
                     right: Box::new(expr.clone()),
@@ -255,7 +285,7 @@ impl Parser {
         let mut node = self.comparison();
 
         while self.match_token(vec![TokenType::Equal, TokenType::NotEqual]) {
-            let operator = self.previous();
+            let operator = self.previous(1);
             let right = self.comparison();
             node = Node::BinaryExpr {
                 left: Box::new(node),
@@ -277,7 +307,7 @@ impl Parser {
             TokenType::GreaterThan,
             TokenType::GreaterThanOrEqual,
         ]) {
-            let operator = self.previous();
+            let operator = self.previous(1);
             let right = self.term();
             node = Node::BinaryExpr {
                 left: Box::new(node),
@@ -294,7 +324,7 @@ impl Parser {
         let mut node = self.factor();
 
         while self.match_token(vec![TokenType::Add, TokenType::Sub]) {
-            let operator = self.previous();
+            let operator = self.previous(1);
             let mut right = self.factor();
             // check if the types are compatible
             let mut widen_left = false;
@@ -355,7 +385,7 @@ impl Parser {
         let mut node = self.unary();
 
         while self.match_token(vec![TokenType::Mul, TokenType::Div]) {
-            let operator = self.previous();
+            let operator = self.previous(1);
             let mut right = self.unary();
 
             // check if the types are compatible
@@ -415,7 +445,7 @@ impl Parser {
 
     fn unary(&mut self) -> Node {
         if self.match_token(vec![TokenType::Sub]) {
-            let operator = self.previous();
+            let operator = self.previous(1);
             let right = self.unary();
             return Node::UnaryExpr {
                 operator,
@@ -429,7 +459,7 @@ impl Parser {
 
     fn primary(&mut self) -> Node {
         if self.match_token(vec![TokenType::Integer]) {
-            let val: u64 = match self.previous().value {
+            let val: u64 = match self.previous(1).value {
                 Some(Literal::Integer(val)) => val,
                 _ => panic!("Expected integer"),
             };
@@ -446,20 +476,31 @@ impl Parser {
                 },
             };
         } else if self.match_token(vec![TokenType::Identifier]) {
-            let identifier = self.previous();
+            let identifier = self.previous(1);
             match self.find_symbol(identifier.clone()) {
-                Some(symbol) => match symbol.structure {
-                    SymbolType::Variable => {
-                        return Node::LiteralExpr {
-                            value: Literal::Identifier(identifier.lexeme.clone().unwrap()),
-                            ty: symbol.ty,
-                        };
+                Some(symbol) => {
+                    // TODO: This is hacky, fix it
+                    if self.match_token(vec![TokenType::LeftParen]) {
+                        if symbol.structure != SymbolType::Function {
+                            panic!(
+                                "Expected function at line {} column {}",
+                                identifier.line, identifier.column
+                            );
+                        }
+                        return self.function_call();
+                    } else {
+                        if symbol.structure != SymbolType::Variable {
+                            panic!(
+                                "Expected variable at line {} column {}",
+                                identifier.line, identifier.column
+                            );
+                        }
                     }
-                    _ => panic!(
-                        "Expected variable at line {} column {}",
-                        identifier.line, identifier.column
-                    ),
-                },
+                    return Node::LiteralExpr {
+                        value: Literal::Identifier(identifier.lexeme.clone().unwrap()),
+                        ty: symbol.ty.unwrap(),
+                    };
+                }
                 None => panic!(
                     "Variable {} not declared at line {} column {}",
                     identifier.lexeme.clone().unwrap(),
@@ -520,14 +561,20 @@ impl Parser {
             self.current += 1;
         }
 
-        self.previous()
+        self.previous(1)
     }
 
-    fn previous(&self) -> Token {
-        self.tokens[self.current - 1].clone()
+    fn previous(&self, i: usize) -> Token {
+        self.tokens[self.current - i].clone()
     }
 
-    fn add_symbol(&mut self, identifier: Token, structure: SymbolType, ty: Type) {
+    fn add_symbol(
+        &mut self,
+        identifier: Token,
+        structure: SymbolType,
+        ty: Type,
+        end_label: Option<String>,
+    ) -> Symbol {
         let symbol = self.find_symbol(identifier.clone());
         if symbol.is_some() {
             panic!(
@@ -538,11 +585,16 @@ impl Parser {
             );
         }
 
-        self.symbols.push(Symbol {
+        let symbol = Symbol {
             identifier,
             structure,
-            ty,
-        });
+            ty: Some(ty),
+            end_label,
+        };
+
+        self.symbols.push(symbol.clone());
+
+        symbol
     }
 
     fn find_symbol(&self, identifier: Token) -> Option<Symbol> {
@@ -640,16 +692,63 @@ impl Parser {
     fn fn_decl(&mut self) -> Node {
         self.expect(vec![TokenType::Fn]);
         let identifier = self.expect(vec![TokenType::Identifier]);
-        self.add_symbol(identifier.clone(), SymbolType::Function, Type::Int);
+        let end_label = Some(format!("{}{}", identifier.lexeme.clone().unwrap(), "_end"));
+        let symbol = self.add_symbol(
+            identifier.clone(),
+            SymbolType::Function,
+            Type::Int,
+            end_label,
+        );
         self.expect(vec![TokenType::LeftParen]);
         // TODO: parse parameters
         self.expect(vec![TokenType::RightParen]);
-        // TODO: parse return type
+
+        let mut ty: Option<Type> = None;
+        if self.match_token(vec![TokenType::Colon]) {
+            let ty_token = self.expect(vec![TokenType::Int, TokenType::U8, TokenType::U32]);
+            ty = Some(self.parse_type(ty_token));
+        }
+        self.current_fn = Some(symbol.clone());
         let body = self.compound_statement();
+        // ensure that the function returns a value if it has a return type in the last statement
+        if ty.is_some() {
+            match &body {
+                Node::CompoundStmt { statements } => {
+                    if statements.len() == 0 {
+                        panic!(
+                            "Function {} does not return a value at line {} column {}",
+                            identifier.lexeme.clone().unwrap(),
+                            identifier.line,
+                            identifier.column
+                        );
+                    }
+
+                    let last = statements.last().unwrap();
+                    match last {
+                        Node::ReturnStmt { .. } => {}
+                        _ => panic!(
+                            "Function {} does not return a value at line {} column {}",
+                            identifier.lexeme.clone().unwrap(),
+                            identifier.line,
+                            identifier.column
+                        ),
+                    }
+                }
+                _ => panic!(
+                    "Function {} does not return a value at line {} column {}",
+                    identifier.lexeme.clone().unwrap(),
+                    identifier.line,
+                    identifier.column
+                ),
+            }
+        }
+
+        self.current_fn = None;
 
         Node::FnDecl {
             identifier,
             body: Box::new(body),
+            return_type: ty,
         }
     }
 
@@ -667,16 +766,17 @@ impl Parser {
             return true;
         }
 
-        if left == Type::U8 && right == Type::Int {
+        let left_size = left.size();
+        let right_size = right.size();
+
+        if left_size < right_size {
             *widen_left = true;
             *widen_right = false;
             return true;
         }
 
-        if left == Type::Int && right == Type::U8 {
+        if left_size > right_size {
             if right_only {
-                *widen_left = false;
-                *widen_right = false;
                 return false;
             }
 
@@ -685,6 +785,93 @@ impl Parser {
             return true;
         }
 
-        false
+        *widen_left = false;
+        *widen_right = false;
+        true
+    }
+
+    fn function_call(&mut self) -> Node {
+        let identifier = self.previous(2);
+        let symbol = self.find_symbol(identifier.clone());
+
+        if symbol.is_none() {
+            panic!(
+                "Function {} not declared at line {} column {}",
+                identifier.lexeme.clone().unwrap(),
+                identifier.line,
+                identifier.column
+            );
+        }
+
+        let symbol = symbol.unwrap();
+        if symbol.structure != SymbolType::Function {
+            panic!(
+                "Expected function at line {} column {}",
+                identifier.line, identifier.column
+            );
+        }
+
+        let expr = self.expression();
+
+        self.expect(vec![TokenType::RightParen]);
+
+        Node::FnCall {
+            identifier,
+            expr: Box::new(expr),
+            ty: symbol.ty.unwrap(),
+        }
+    }
+
+    fn return_statement(&mut self) -> Node {
+        if self.current_fn.is_none() {
+            panic!("Return statement outside of function");
+        }
+
+        let fn_sym = self.current_fn.clone().unwrap();
+
+        if !fn_sym.ty.is_some() {
+            panic!(
+                "Function {} has no return type",
+                fn_sym.identifier.lexeme.clone().unwrap()
+            );
+        }
+
+        let mut expr = self.expression();
+
+        // Check if the type is compatible
+        let mut widen_left = false;
+        let mut widen_right = false;
+        if !self.type_compatible(
+            expr.ty().unwrap(),
+            fn_sym.clone().ty.unwrap(),
+            true,
+            &mut widen_left,
+            &mut widen_right,
+        ) {
+            panic!(
+                "Incompatible types at line {} column {}",
+                self.previous(1).line,
+                self.previous(1).column
+            );
+        }
+
+        if widen_left {
+            expr = Node::UnaryExpr {
+                operator: Token {
+                    token_type: TokenType::Widen,
+                    lexeme: None,
+                    line: self.previous(1).line,
+                    column: self.previous(1).column,
+                    value: None,
+                },
+                right: Box::new(expr.clone()),
+                ty: expr.ty().unwrap(),
+            };
+        }
+
+        Node::ReturnStmt {
+            expr: Box::new(expr),
+            fn_name: fn_sym,
+        }
     }
 }

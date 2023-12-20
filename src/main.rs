@@ -19,12 +19,17 @@ fn main() {
 
     // let source = String::from(
     //     "
-    //     fn main() {
-    //         let fred: int;
-    //         let jim: int;
-    //         fred= 5;
-    //         jim= 12;
-    //         print(fred + jim);
+    //     fn fred(): int {
+    //         return 20;
+    //       }
+
+    //       fn main(): int {
+    //         let result: int;
+    //         print(10);
+    //         result= fred(15);
+    //         print(result);
+    //         print(fred(15)+10);
+    //         return 0;
     //       }",
     // );
 

@@ -1,6 +1,7 @@
 use crate::{
     ast::Node,
-    lexer::{Literal, TokenType},
+    lexer::{Literal, Token, TokenType},
+    parser::Symbol,
     types::Type,
 };
 
@@ -13,6 +14,7 @@ pub struct CodeGen {
 
 const REGISTER_NAMES: [&str; 4] = ["%r8", "%r9", "%r10", "%r11"];
 const BYTE_REGISTER_NAMES: [&str; 4] = ["%r8b", "%r9b", "%r10b", "%r11b"];
+const DWORD_REGISTER_NAMES: [&str; 4] = ["%r8d", "%r9d", "%r10d", "%r11d"];
 
 impl CodeGen {
     pub fn new(nodes: Vec<Node>) -> Self {
@@ -39,6 +41,7 @@ impl CodeGen {
             Node::LiteralExpr { value, ty } => match value {
                 Literal::Integer(i) => self.load(i as i64, ty),
                 Literal::U8(u) => self.load(u as i64, ty),
+                Literal::U32(u) => self.load(u as i64, ty),
                 Literal::Identifier(i) => self.load_global(i, ty),
             },
             Node::BinaryExpr {
@@ -109,7 +112,17 @@ impl CodeGen {
                 0
             }
             Node::WhileStmt { condition, body } => self.while_stmt(condition, body),
-            Node::FnDecl { identifier, body } => self.function(identifier, body),
+            Node::FnDecl {
+                identifier,
+                body,
+                return_type,
+            } => self.function(identifier, body),
+            Node::FnCall {
+                identifier,
+                expr,
+                ty,
+            } => self.function_call(identifier, expr, ty),
+            Node::ReturnStmt { expr, fn_name } => self.return_stmt(expr, fn_name),
         }
     }
 
@@ -151,11 +164,18 @@ impl CodeGen {
         if ty == Type::Int {
             self.assembly
                 .push_str(&format!("\tmovq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
-        } else {
+        } else if ty == Type::U8 {
             self.assembly.push_str(&format!(
                 "\tmovzbq\t{}, {}\n",
                 identifier, REGISTER_NAMES[r]
             ));
+        } else if ty == Type::U32 {
+            self.assembly.push_str(&format!(
+                "\tmovzbl\t{}, {}\n",
+                identifier, REGISTER_NAMES[r]
+            ));
+        } else {
+            panic!("Unexpected type {:?}", ty);
         }
 
         r
@@ -167,11 +187,18 @@ impl CodeGen {
                 "\tmovq\t{}, {}\n",
                 REGISTER_NAMES[register], identifier
             ));
-        } else {
+        } else if ty == Type::U8 {
             self.assembly.push_str(&format!(
                 "\tmovb\t{}, {}\n",
                 BYTE_REGISTER_NAMES[register], identifier
             ));
+        } else if ty == Type::U32 {
+            self.assembly.push_str(&format!(
+                "\tmovl\t{}, {}\n",
+                DWORD_REGISTER_NAMES[register], identifier
+            ));
+        } else {
+            panic!("Unexpected type {:?}", ty);
         }
     }
 
@@ -180,13 +207,9 @@ impl CodeGen {
     }
 
     fn define_global(&mut self, identifier: String, ty: Type) {
-        if ty == Type::Int {
-            self.assembly
-                .push_str(&format!("\t.comm\t{},8,8\n", identifier));
-        } else {
-            self.assembly
-                .push_str(&format!("\t.comm\t{},1,1\n", identifier));
-        }
+        let size = ty.size();
+        self.assembly
+            .push_str(&format!("\t.comm\t{}, {}, {}\n", identifier, size, size));
     }
 
     fn add(&mut self, left: usize, right: usize) -> usize {
@@ -403,10 +426,11 @@ impl CodeGen {
         0
     }
 
-    fn function(&mut self, identifier: crate::lexer::Token, body: Box<Node>) -> usize {
-        self.function_preamble(identifier.lexeme.unwrap());
+    fn function(&mut self, identifier: Token, body: Box<Node>) -> usize {
+        let fn_name = identifier.lexeme.unwrap();
+        self.function_preamble(fn_name.clone());
         self.generate_node(*body);
-        self.function_postamble();
+        self.function_postamble(fn_name.clone());
         0
     }
 
@@ -419,9 +443,39 @@ impl CodeGen {
         self.assembly.push_str("\tmovq\t%rsp, %rbp\n");
     }
 
-    fn function_postamble(&mut self) {
-        self.assembly.push_str(&format!("\tmovl\t$0, %eax\n"));
+    fn function_postamble(&mut self, fn_name: String) {
+        // self.assembly.push_str(&format!("\tmovl\t$0, %eax\n"));
+        // self.assembly.push_str(&format!("\tpopq\t%rbp\n"));
+        // self.assembly.push_str(&format!("\tret\n"));
+        self.assembly
+            .push_str(format!("{}_end:\n", fn_name).as_str());
         self.assembly.push_str(&format!("\tpopq\t%rbp\n"));
         self.assembly.push_str(&format!("\tret\n"));
+    }
+
+    fn function_call(
+        &mut self,
+        identifier: crate::lexer::Token,
+        expr: Box<Node>,
+        ty: Type,
+    ) -> usize {
+        let register = self.generate_node(*expr);
+        let out_register = self.allocate_register();
+        self.assembly
+            .push_str(&format!("\tmovq\t{}, %rdi\n", REGISTER_NAMES[register]));
+        self.assembly
+            .push_str(&format!("\tcall\t{}\n", identifier.lexeme.unwrap()));
+        self.assembly
+            .push_str(&format!("\tmovq\t%rax, {}\n", REGISTER_NAMES[out_register]));
+        self.free_register(register);
+        out_register
+    }
+
+    fn return_stmt(&mut self, expr: Box<Node>, fn_name: Symbol) -> usize {
+        let register = self.generate_node(*expr);
+        self.assembly
+            .push_str(&format!("\tmovq\t{}, %rax\n", REGISTER_NAMES[register]));
+        self.free_register(register);
+        0
     }
 }
