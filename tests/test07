@@ -1,6 +1,5 @@
-fn main()
-{
-  let i;
+fn main() {
+  let i: int;
   for (i= 1; i <= 10; i= i + 1) {
     print(i);
   }

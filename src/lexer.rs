@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Integer(u64),
+    U8(u8),
     Identifier(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: Option<String>,
@@ -28,6 +29,7 @@ pub enum TokenType {
     Int,
     Let,
     Print,
+    U8,
     While,
 
     // Single-character tokens
@@ -43,12 +45,15 @@ pub enum TokenType {
     Assign,
     LessThan,
     GreaterThan,
+    Colon,
 
     // Double-character tokens
     Equal,
     NotEqual,
     LessThanOrEqual,
     GreaterThanOrEqual,
+
+    Widen,
 
     EOF,
 }
@@ -81,6 +86,7 @@ impl Lexer {
                 keywords.insert(String::from("int"), TokenType::Int);
                 keywords.insert(String::from("let"), TokenType::Let);
                 keywords.insert(String::from("print"), TokenType::Print);
+                keywords.insert(String::from("u8"), TokenType::U8);
                 keywords.insert(String::from("while"), TokenType::While);
                 keywords
             },
@@ -121,6 +127,7 @@ impl Lexer {
             '{' => self.add_token(TokenType::LeftBrace),
             '}' => self.add_token(TokenType::RightBrace),
             ';' => self.add_token(TokenType::SemiColon),
+            ':' => self.add_token(TokenType::Colon),
             '=' => {
                 if self.match_char('=') {
                     self.add_token(TokenType::Equal);

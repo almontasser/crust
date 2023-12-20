@@ -1,4 +1,7 @@
-use crate::lexer::{Literal, Token};
+use crate::{
+    lexer::{Literal, Token},
+    types::Type,
+};
 
 #[derive(Debug, Clone)]
 pub enum Node {
@@ -6,19 +9,23 @@ pub enum Node {
         left: Box<Node>,
         operator: Token,
         right: Box<Node>,
+        ty: Type,
     },
     UnaryExpr {
         operator: Token,
         right: Box<Node>,
+        ty: Type,
     },
     LiteralExpr {
         value: Literal,
+        ty: Type,
     },
     PrintStmt {
         expr: Box<Node>,
     },
     GlobalVar {
         identifier: Token,
+        ty: Type,
     },
     AssignStmt {
         identifier: Token,
@@ -40,4 +47,36 @@ pub enum Node {
         identifier: Token,
         body: Box<Node>,
     },
+}
+
+impl Node {
+    pub fn ty(&self) -> Option<Type> {
+        match self {
+            Node::BinaryExpr { ty, .. } => Some(ty.clone()),
+            Node::UnaryExpr { ty, .. } => Some(ty.clone()),
+            Node::LiteralExpr { ty, .. } => Some(ty.clone()),
+            Node::PrintStmt { .. } => None,
+            Node::GlobalVar { ty, .. } => Some(ty.clone()),
+            Node::AssignStmt { .. } => None,
+            Node::CompoundStmt { .. } => None,
+            Node::IfStmt { .. } => None,
+            Node::WhileStmt { .. } => None,
+            Node::FnDecl { .. } => None,
+        }
+    }
+
+    pub fn set_ty(&mut self, ty: Type) {
+        match self {
+            Node::BinaryExpr { ty: t, .. } => *t = ty,
+            Node::UnaryExpr { ty: t, .. } => *t = ty,
+            Node::LiteralExpr { ty: t, .. } => *t = ty,
+            Node::PrintStmt { .. } => {}
+            Node::GlobalVar { .. } => {}
+            Node::AssignStmt { .. } => {}
+            Node::CompoundStmt { .. } => {}
+            Node::IfStmt { .. } => {}
+            Node::WhileStmt { .. } => {}
+            Node::FnDecl { .. } => {}
+        }
+    }
 }

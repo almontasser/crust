@@ -1,5 +1,5 @@
 fn main() {
-  let x;
+  let x: int;
   x= 7 < 9;  print(x);
   x= 7 <= 9; print(x);
   x= 7 != 9; print(x);

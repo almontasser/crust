@@ -1,6 +1,7 @@
 use crate::{
     ast::Node,
     lexer::{Literal, TokenType},
+    types::Type,
 };
 
 pub struct CodeGen {
@@ -35,14 +36,16 @@ impl CodeGen {
 
     fn generate_node(&mut self, node: Node) -> usize {
         match node {
-            Node::LiteralExpr { value } => match value {
-                Literal::Integer(i) => self.load(i as i64),
-                Literal::Identifier(i) => self.load_global(i),
+            Node::LiteralExpr { value, ty } => match value {
+                Literal::Integer(i) => self.load(i as i64, ty),
+                Literal::U8(u) => self.load(u as i64, ty),
+                Literal::Identifier(i) => self.load_global(i, ty),
             },
             Node::BinaryExpr {
                 left,
                 operator,
                 right,
+                ty,
             } => {
                 let left = self.generate_node(*left);
                 let right = self.generate_node(*right);
@@ -63,14 +66,19 @@ impl CodeGen {
                     _ => panic!("Unexpected token {:?}", operator),
                 }
             }
-            Node::UnaryExpr { operator, right } => {
-                let right = self.generate_node(*right);
+            Node::UnaryExpr {
+                operator,
+                right,
+                ty,
+            } => {
+                let right_node = self.generate_node(*right.clone());
 
                 match operator.token_type {
                     TokenType::Sub => {
-                        self.load(0);
-                        self.subtract(0, right)
+                        self.load(0, ty);
+                        self.subtract(0, right_node)
                     }
+                    TokenType::Widen => self.widen(right_node, right.ty().unwrap(), ty),
                     _ => panic!("Unexpected token {:?}", operator),
                 }
             }
@@ -79,13 +87,13 @@ impl CodeGen {
                 self.printint(register);
                 0
             }
-            Node::GlobalVar { identifier } => {
-                self.define_global(identifier.lexeme.unwrap());
+            Node::GlobalVar { identifier, ty } => {
+                self.define_global(identifier.lexeme.unwrap(), ty);
                 0
             }
             Node::AssignStmt { identifier, expr } => {
-                let register = self.generate_node(*expr);
-                self.store(register, identifier.lexeme.unwrap());
+                let register = self.generate_node(*expr.clone());
+                self.store(register, identifier.lexeme.unwrap(), expr.ty().unwrap());
                 self.free_register(register);
                 0
             }
@@ -131,32 +139,54 @@ impl CodeGen {
         self.assembly.push_str("\tret\n");
     }
 
-    fn load(&mut self, value: i64) -> usize {
+    fn load(&mut self, value: i64, _ty: Type) -> usize {
         let r = self.allocate_register();
         self.assembly
             .push_str(&format!("\tmovq\t${}, {}\n", value, REGISTER_NAMES[r]));
         r
     }
 
-    fn load_global(&mut self, identifier: String) -> usize {
+    fn load_global(&mut self, identifier: String, ty: Type) -> usize {
         let r = self.allocate_register();
-        self.assembly.push_str(&format!(
-            "\tmovq\t{}(%rip), {}\n",
-            identifier, REGISTER_NAMES[r]
-        ));
+        if ty == Type::Int {
+            self.assembly
+                .push_str(&format!("\tmovq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
+        } else {
+            self.assembly.push_str(&format!(
+                "\tmovzbq\t{}, {}\n",
+                identifier, REGISTER_NAMES[r]
+            ));
+        }
+
         r
     }
 
-    fn store(&mut self, register: usize, identifier: String) {
-        self.assembly.push_str(&format!(
-            "\tmovq\t{}, {}(%rip)\n",
-            REGISTER_NAMES[register], identifier
-        ));
+    fn store(&mut self, register: usize, identifier: String, ty: Type) {
+        if ty == Type::Int {
+            self.assembly.push_str(&format!(
+                "\tmovq\t{}, {}\n",
+                REGISTER_NAMES[register], identifier
+            ));
+        } else {
+            self.assembly.push_str(&format!(
+                "\tmovb\t{}, {}\n",
+                BYTE_REGISTER_NAMES[register], identifier
+            ));
+        }
     }
 
-    fn define_global(&mut self, identifier: String) {
-        self.assembly
-            .push_str(&format!("\t.comm\t{},8,8\n", identifier));
+    fn widen(&mut self, register: usize, old_ty: Type, new_ty: Type) -> usize {
+        register
+    }
+
+    fn define_global(&mut self, identifier: String, ty: Type) {
+        if ty == Type::Int {
+            self.assembly
+                .push_str(&format!("\t.comm\t{},8,8\n", identifier));
+        } else {
+            self.assembly
+                .push_str(&format!("\t.comm\t{},1,1\n", identifier));
+        }
     }
 
     fn add(&mut self, left: usize, right: usize) -> usize {
@@ -302,6 +332,7 @@ impl CodeGen {
                 left,
                 operator,
                 right,
+                ty,
             } => {
                 let left_reg = self.generate_node(*left);
                 let right_reg = self.generate_node(*right);
@@ -346,6 +377,7 @@ impl CodeGen {
                 left,
                 operator,
                 right,
+                ty,
             } => {
                 let left_reg = self.generate_node(*left);
                 let right_reg = self.generate_node(*right);
@@ -380,8 +412,9 @@ impl CodeGen {
 
     fn function_preamble(&mut self, name: String) {
         self.assembly.push_str("\t.global main\n");
-        self.assembly.push_str("\t.type\tmain, @function\n");
-        self.assembly.push_str("main:\n");
+        self.assembly
+            .push_str(&format!("\t.type\t{}, @function\n", name));
+        self.assembly.push_str(&format!("{}:\n", name));
         self.assembly.push_str("\tpushq\t%rbp\n");
         self.assembly.push_str("\tmovq\t%rsp, %rbp\n");
     }

@@ -1,0 +1,14 @@
+fn main()
+{
+  let i: int;
+  for (i= 1; i <= 10; i= i + 1) {
+    print(i);
+  }
+}
+
+fn fred()
+{
+  let a: int; let b: int;
+  a= 12; b= 3 * a;
+  if (a >= b) { print(2 * b - a); }
+}

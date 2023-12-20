@@ -3,13 +3,27 @@ use core::panic;
 use crate::{
     ast::Node,
     lexer::{Literal, Token, TokenType},
+    types::Type,
 };
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SymbolType {
+    Function,
+    Variable,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Symbol {
+    identifier: Token,
+    structure: SymbolType,
+    ty: Type,
+}
 
 pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
     nodes: Vec<Node>,
-    global_variables: Vec<String>,
+    symbols: Vec<Symbol>,
 }
 
 impl Parser {
@@ -18,7 +32,7 @@ impl Parser {
             tokens,
             current: 0,
             nodes: Vec::new(),
-            global_variables: Vec::new(),
+            symbols: Vec::new(),
         }
     }
 
@@ -82,27 +96,76 @@ impl Parser {
         }
     }
 
+    fn parse_type(&self, token: Token) -> Type {
+        match token.token_type {
+            TokenType::Int => Type::Int,
+            TokenType::U8 => Type::U8,
+            _ => panic!("Expected type"),
+        }
+    }
+
     fn var_decl(&mut self) -> Node {
+        // let ty = self.parse_type(self.previous());
         let identifier = self.expect(vec![TokenType::Identifier]);
-        self.add_global_variable(identifier.clone());
-        Node::GlobalVar { identifier }
+        self.expect(vec![TokenType::Colon]);
+        let ty_token = self.expect(vec![TokenType::Int, TokenType::U8]);
+        let ty = self.parse_type(ty_token);
+        self.add_symbol(identifier.clone(), SymbolType::Variable, ty.clone());
+        Node::GlobalVar { identifier, ty }
     }
 
     fn assignment(&mut self) -> Node {
         let identifier = self.previous();
         // make sure the identifier is declared
-        let ident_lexeme = identifier.lexeme.clone().unwrap();
-        if !self.global_variables.contains(&ident_lexeme) {
+        let symbol = self.find_symbol(identifier.clone()).unwrap();
+        if !self.symbols.contains(&symbol) {
             panic!(
                 "Variable {} not declared at line {} column {}",
-                ident_lexeme, identifier.line, identifier.column
+                identifier.lexeme.clone().unwrap(),
+                identifier.line,
+                identifier.column
             );
         }
         self.expect(vec![TokenType::Assign]);
         let expr = self.expression();
-        Node::AssignStmt {
-            identifier,
-            expr: Box::new(expr),
+
+        // Check if the type is compatible
+        let mut widen_left = false;
+        let mut widen_right = false;
+        if !self.type_compatible(
+            expr.ty().unwrap(),
+            symbol.ty,
+            true,
+            &mut widen_left,
+            &mut widen_right,
+        ) {
+            panic!(
+                "Incompatible types at line {} column {}",
+                self.previous().line,
+                self.previous().column
+            );
+        }
+
+        if widen_left {
+            return Node::AssignStmt {
+                identifier,
+                expr: Box::new(Node::UnaryExpr {
+                    operator: Token {
+                        token_type: TokenType::Widen,
+                        lexeme: None,
+                        line: self.previous().line,
+                        column: self.previous().column,
+                        value: None,
+                    },
+                    right: Box::new(expr.clone()),
+                    ty: expr.ty().unwrap(),
+                }),
+            };
+        } else {
+            Node::AssignStmt {
+                identifier,
+                expr: Box::new(expr),
+            }
         }
     }
 
@@ -145,8 +208,41 @@ impl Parser {
         self.expect(vec![TokenType::LeftParen]);
         let expr = self.expression();
         self.expect(vec![TokenType::RightParen]);
-        Node::PrintStmt {
-            expr: Box::new(expr),
+        // Check if the type is compatible
+        let mut widen_left = false;
+        let mut widen_right = false;
+        if !self.type_compatible(
+            Type::Int,
+            expr.ty().unwrap(),
+            false,
+            &mut widen_left,
+            &mut widen_right,
+        ) {
+            panic!(
+                "Incompatible types at line {} column {}",
+                self.previous().line,
+                self.previous().column
+            );
+        }
+
+        if widen_right {
+            return Node::PrintStmt {
+                expr: Box::new(Node::UnaryExpr {
+                    operator: Token {
+                        token_type: TokenType::Widen,
+                        lexeme: None,
+                        line: self.previous().line,
+                        column: self.previous().column,
+                        value: None,
+                    },
+                    right: Box::new(expr.clone()),
+                    ty: expr.ty().unwrap(),
+                }),
+            };
+        } else {
+            return Node::PrintStmt {
+                expr: Box::new(expr),
+            };
         }
     }
 
@@ -165,6 +261,7 @@ impl Parser {
                 left: Box::new(node),
                 operator,
                 right: Box::new(right),
+                ty: Type::U8,
             };
         }
 
@@ -186,6 +283,7 @@ impl Parser {
                 left: Box::new(node),
                 operator,
                 right: Box::new(right),
+                ty: Type::U8,
             };
         }
 
@@ -197,11 +295,56 @@ impl Parser {
 
         while self.match_token(vec![TokenType::Add, TokenType::Sub]) {
             let operator = self.previous();
-            let right = self.factor();
+            let mut right = self.factor();
+            // check if the types are compatible
+            let mut widen_left = false;
+            let mut widen_right = false;
+            if !self.type_compatible(
+                node.ty().unwrap(),
+                right.ty().unwrap(),
+                operator.token_type == TokenType::Sub,
+                &mut widen_left,
+                &mut widen_right,
+            ) {
+                panic!(
+                    "Incompatible types at line {} column {}",
+                    operator.line, operator.column
+                );
+            }
+
+            if widen_left {
+                node = Node::UnaryExpr {
+                    operator: Token {
+                        token_type: TokenType::Widen,
+                        lexeme: None,
+                        line: operator.line,
+                        column: operator.column,
+                        value: None,
+                    },
+                    right: Box::new(node.clone()),
+                    ty: node.ty().unwrap(),
+                };
+            }
+
+            if widen_right {
+                right = Node::UnaryExpr {
+                    operator: Token {
+                        token_type: TokenType::Widen,
+                        lexeme: None,
+                        line: operator.line,
+                        column: operator.column,
+                        value: None,
+                    },
+                    right: Box::new(right.clone()),
+                    ty: right.ty().unwrap(),
+                };
+            }
+
             node = Node::BinaryExpr {
-                left: Box::new(node),
+                left: Box::new(node.clone()),
                 operator,
                 right: Box::new(right),
+                ty: node.ty().unwrap(),
             };
         }
 
@@ -213,11 +356,57 @@ impl Parser {
 
         while self.match_token(vec![TokenType::Mul, TokenType::Div]) {
             let operator = self.previous();
-            let right = self.unary();
+            let mut right = self.unary();
+
+            // check if the types are compatible
+            let mut widen_left = false;
+            let mut widen_right = false;
+            if !self.type_compatible(
+                node.ty().unwrap(),
+                right.ty().unwrap(),
+                operator.token_type == TokenType::Sub,
+                &mut widen_left,
+                &mut widen_right,
+            ) {
+                panic!(
+                    "Incompatible types at line {} column {}",
+                    operator.line, operator.column
+                );
+            }
+
+            if widen_left {
+                node = Node::UnaryExpr {
+                    operator: Token {
+                        token_type: TokenType::Widen,
+                        lexeme: None,
+                        line: operator.line,
+                        column: operator.column,
+                        value: None,
+                    },
+                    right: Box::new(node.clone()),
+                    ty: node.ty().unwrap(),
+                };
+            }
+
+            if widen_right {
+                right = Node::UnaryExpr {
+                    operator: Token {
+                        token_type: TokenType::Widen,
+                        lexeme: None,
+                        line: operator.line,
+                        column: operator.column,
+                        value: None,
+                    },
+                    right: Box::new(right.clone()),
+                    ty: right.ty().unwrap(),
+                };
+            }
+
             node = Node::BinaryExpr {
-                left: Box::new(node),
+                left: Box::new(node.clone()),
                 operator,
                 right: Box::new(right),
+                ty: node.ty().unwrap(),
             };
         }
 
@@ -230,7 +419,8 @@ impl Parser {
             let right = self.unary();
             return Node::UnaryExpr {
                 operator,
-                right: Box::new(right),
+                right: Box::new(right.clone()),
+                ty: right.ty().unwrap(),
             };
         }
 
@@ -239,13 +429,44 @@ impl Parser {
 
     fn primary(&mut self) -> Node {
         if self.match_token(vec![TokenType::Integer]) {
+            let val: u64 = match self.previous().value {
+                Some(Literal::Integer(val)) => val,
+                _ => panic!("Expected integer"),
+            };
             return Node::LiteralExpr {
-                value: self.previous().value.unwrap(),
+                value: if val <= u8::MAX as u64 {
+                    Literal::U8(val as u8)
+                } else {
+                    Literal::Integer(val)
+                },
+                ty: if val <= u8::MAX as u64 {
+                    Type::U8
+                } else {
+                    Type::Int
+                },
             };
         } else if self.match_token(vec![TokenType::Identifier]) {
-            return Node::LiteralExpr {
-                value: self.previous().value.unwrap(),
-            };
+            let identifier = self.previous();
+            match self.find_symbol(identifier.clone()) {
+                Some(symbol) => match symbol.structure {
+                    SymbolType::Variable => {
+                        return Node::LiteralExpr {
+                            value: Literal::Identifier(identifier.lexeme.clone().unwrap()),
+                            ty: symbol.ty,
+                        };
+                    }
+                    _ => panic!(
+                        "Expected variable at line {} column {}",
+                        identifier.line, identifier.column
+                    ),
+                },
+                None => panic!(
+                    "Variable {} not declared at line {} column {}",
+                    identifier.lexeme.clone().unwrap(),
+                    identifier.line,
+                    identifier.column
+                ),
+            }
         }
 
         let token = self.peek();
@@ -306,12 +527,32 @@ impl Parser {
         self.tokens[self.current - 1].clone()
     }
 
-    fn add_global_variable(&mut self, identifier: Token) {
-        if let Some(lexeme) = identifier.lexeme.clone() {
-            if !self.global_variables.contains(&lexeme) {
-                self.global_variables.push(lexeme);
+    fn add_symbol(&mut self, identifier: Token, structure: SymbolType, ty: Type) {
+        let symbol = self.find_symbol(identifier.clone());
+        if symbol.is_some() {
+            panic!(
+                "Variable {} already declared at line {} column {}",
+                identifier.lexeme.clone().unwrap(),
+                identifier.line,
+                identifier.column
+            );
+        }
+
+        self.symbols.push(Symbol {
+            identifier,
+            structure,
+            ty,
+        });
+    }
+
+    fn find_symbol(&self, identifier: Token) -> Option<Symbol> {
+        for symbol in &self.symbols {
+            if symbol.identifier.lexeme.clone().unwrap() == identifier.lexeme.clone().unwrap() {
+                return Some(symbol.clone());
             }
         }
+
+        None
     }
 
     fn while_statement(&mut self) -> Node {
@@ -360,6 +601,7 @@ impl Parser {
         let condition = if self.check(TokenType::SemiColon) {
             Node::LiteralExpr {
                 value: Literal::Integer(1),
+                ty: Type::U8,
             }
         } else {
             self.expression()
@@ -398,7 +640,7 @@ impl Parser {
     fn fn_decl(&mut self) -> Node {
         self.expect(vec![TokenType::Fn]);
         let identifier = self.expect(vec![TokenType::Identifier]);
-        self.add_global_variable(identifier.clone());
+        self.add_symbol(identifier.clone(), SymbolType::Function, Type::Int);
         self.expect(vec![TokenType::LeftParen]);
         // TODO: parse parameters
         self.expect(vec![TokenType::RightParen]);
@@ -409,5 +651,40 @@ impl Parser {
             identifier,
             body: Box::new(body),
         }
+    }
+
+    fn type_compatible(
+        &self,
+        left: Type,
+        right: Type,
+        right_only: bool,
+        widen_left: &mut bool,
+        widen_right: &mut bool,
+    ) -> bool {
+        if left == right {
+            *widen_left = false;
+            *widen_right = false;
+            return true;
+        }
+
+        if left == Type::U8 && right == Type::Int {
+            *widen_left = true;
+            *widen_right = false;
+            return true;
+        }
+
+        if left == Type::Int && right == Type::U8 {
+            if right_only {
+                *widen_left = false;
+                *widen_right = false;
+                return false;
+            }
+
+            *widen_left = false;
+            *widen_right = true;
+            return true;
+        }
+
+        false
     }
 }
