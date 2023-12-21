@@ -73,20 +73,4 @@ impl Node {
             Node::ReturnStmt { .. } => None,
         }
     }
-
-    pub fn set_ty(&mut self, ty: Type) {
-        match self {
-            Node::BinaryExpr { ty: t, .. } => *t = ty,
-            Node::UnaryExpr { ty: t, .. } => *t = ty,
-            Node::LiteralExpr { ty: t, .. } => *t = ty,
-            Node::GlobalVar { .. } => {}
-            Node::AssignStmt { .. } => {}
-            Node::CompoundStmt { .. } => {}
-            Node::IfStmt { .. } => {}
-            Node::WhileStmt { .. } => {}
-            Node::FnDecl { .. } => {}
-            Node::FnCall { ty: t, .. } => *t = ty,
-            Node::ReturnStmt { .. } => {}
-        }
-    }
 }

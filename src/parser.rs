@@ -514,6 +514,8 @@ impl Parser {
             return Node::LiteralExpr {
                 value: if val <= u8::MAX as u64 {
                     Literal::U8(val as u8)
+                } else if val <= u32::MAX as u64 {
+                    Literal::U32(val as u32)
                 } else {
                     Literal::Integer(val)
                 },

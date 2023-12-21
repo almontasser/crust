@@ -48,7 +48,7 @@ impl CodeGen {
                 left,
                 operator,
                 right,
-                ty,
+                ..
             } => {
                 let left = self.generate_node(*left);
                 let right = self.generate_node(*right);
@@ -126,17 +126,13 @@ impl CodeGen {
             }
             Node::WhileStmt { condition, body } => self.while_stmt(condition, body),
             Node::FnDecl {
-                identifier,
-                body,
-                return_type,
+                identifier, body, ..
             } => self.function(identifier, body),
             Node::FnCall {
-                identifier,
-                expr,
-                ty,
+                identifier, expr, ..
             } => {
                 // TODO: fix ths hack
-                let r = self.function_call(identifier.clone(), expr, ty);
+                let r = self.function_call(identifier.clone(), expr);
                 if identifier.lexeme.unwrap() == "printint" {
                     self.free_register(r);
                     0
@@ -166,12 +162,6 @@ impl CodeGen {
         self.assembly.push_str("\tnop\n");
         self.assembly.push_str("\tleave\n");
         self.assembly.push_str("\tret\n\n");
-    }
-
-    fn postamble(&mut self) {
-        self.assembly.push_str("\tmovl\t$0, %eax\n");
-        self.assembly.push_str("\tpopq\t%rbp\n");
-        self.assembly.push_str("\tret\n");
     }
 
     fn load(&mut self, value: i64, _ty: Type) -> usize {
@@ -229,7 +219,7 @@ impl CodeGen {
         }
     }
 
-    fn widen(&mut self, register: usize, old_ty: Type, new_ty: Type) -> usize {
+    fn widen(&mut self, register: usize, _old_ty: Type, _new_ty: Type) -> usize {
         register
     }
 
@@ -276,13 +266,6 @@ impl CodeGen {
             .push_str(&format!("\tmovq\t%rax, {}\n", REGISTER_NAMES[left]));
         self.free_register(right);
         left
-    }
-
-    fn printint(&mut self, register: usize) {
-        self.assembly
-            .push_str(&format!("\tmovq\t{}, %rdi\n", REGISTER_NAMES[register]));
-        self.assembly.push_str("\tcall\tprintint\n");
-        self.free_register(register);
     }
 
     fn allocate_register(&mut self) -> usize {
@@ -382,7 +365,7 @@ impl CodeGen {
                 left,
                 operator,
                 right,
-                ty,
+                ..
             } => {
                 let left_reg = self.generate_node(*left);
                 let right_reg = self.generate_node(*right);
@@ -427,7 +410,7 @@ impl CodeGen {
                 left,
                 operator,
                 right,
-                ty,
+                ..
             } => {
                 let left_reg = self.generate_node(*left);
                 let right_reg = self.generate_node(*right);
@@ -480,12 +463,7 @@ impl CodeGen {
         self.assembly.push_str(&format!("\tret\n"));
     }
 
-    fn function_call(
-        &mut self,
-        identifier: crate::lexer::Token,
-        expr: Box<Node>,
-        ty: Type,
-    ) -> usize {
+    fn function_call(&mut self, identifier: crate::lexer::Token, expr: Box<Node>) -> usize {
         let register = self.generate_node(*expr);
         let out_register = self.allocate_register();
         self.assembly
@@ -500,6 +478,30 @@ impl CodeGen {
 
     fn return_stmt(&mut self, expr: Box<Node>, fn_name: Symbol) -> usize {
         let register = self.generate_node(*expr);
+        match fn_name.ty.clone().unwrap() {
+            Type::Int => {
+                self.assembly.push_str(&format!(
+                    "\tmovl\t{}, %eax\n",
+                    DWORD_REGISTER_NAMES[register]
+                ));
+            }
+            Type::PInt | Type::PU8 | Type::PU32 => {
+                self.assembly
+                    .push_str(&format!("\tmovq\t{}, %rax\n", REGISTER_NAMES[register]));
+            }
+            Type::U8 => {
+                self.assembly.push_str(&format!(
+                    "\tmovzbl\t{}, %eax\n",
+                    BYTE_REGISTER_NAMES[register]
+                ));
+            }
+            Type::U32 => {
+                self.assembly.push_str(&format!(
+                    "\tmovl\t{}, %eax\n",
+                    DWORD_REGISTER_NAMES[register]
+                ));
+            }
+        }
         self.assembly
             .push_str(&format!("\tmovq\t{}, %rax\n", REGISTER_NAMES[register]));
         self.free_register(register);
