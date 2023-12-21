@@ -107,6 +107,12 @@ impl CodeGen {
                 self.define_global(identifier.lexeme.unwrap(), ty);
                 0
             }
+            Node::GlobalVarMany { identifiers, ty } => {
+                for identifier in identifiers {
+                    self.define_global(identifier.lexeme.unwrap(), ty.clone());
+                }
+                0
+            }
             Node::AssignStmt { identifier, expr } => {
                 let register = self.generate_node(*expr.clone());
                 self.store(register, identifier.lexeme.unwrap(), expr.ty().unwrap());

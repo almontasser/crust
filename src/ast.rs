@@ -25,6 +25,10 @@ pub enum Node {
         identifier: Token,
         ty: Type,
     },
+    GlobalVarMany {
+        identifiers: Vec<Token>,
+        ty: Type,
+    },
     AssignStmt {
         identifier: Token,
         expr: Box<Node>,
@@ -64,6 +68,7 @@ impl Node {
             Node::UnaryExpr { ty, .. } => Some(ty.clone()),
             Node::LiteralExpr { ty, .. } => Some(ty.clone()),
             Node::GlobalVar { ty, .. } => Some(ty.clone()),
+            Node::GlobalVarMany { ty, .. } => Some(ty.clone()),
             Node::AssignStmt { .. } => None,
             Node::CompoundStmt { .. } => None,
             Node::IfStmt { .. } => None,

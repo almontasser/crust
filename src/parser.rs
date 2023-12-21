@@ -56,7 +56,14 @@ impl Parser {
 
     pub fn parse(&mut self) -> &Vec<Node> {
         while !self.is_at_end() {
-            let node = self.fn_decl();
+            let node = if self.match_token(vec![TokenType::Let]) {
+                let node = self.var_decl();
+                self.expect(vec![TokenType::SemiColon]).unwrap();
+                node
+            } else {
+                self.fn_decl()
+            };
+
             self.nodes.push(node);
         }
 
@@ -70,23 +77,24 @@ impl Parser {
     fn compound_statement(&mut self) -> Node {
         let mut nodes = Vec::new();
 
-        self.expect(vec![TokenType::LeftBrace]);
+        self.expect(vec![TokenType::LeftBrace]).unwrap();
 
         while !self.check(TokenType::RightBrace) && !self.is_at_end() {
             let node = self.single_statement();
             match node {
                 Node::AssignStmt { .. }
                 | Node::GlobalVar { .. }
+                | Node::GlobalVarMany { .. }
                 | Node::FnCall { .. }
                 | Node::ReturnStmt { .. } => {
-                    self.expect(vec![TokenType::SemiColon]);
+                    self.expect(vec![TokenType::SemiColon]).unwrap();
                 }
                 _ => {}
             }
             nodes.push(node);
         }
 
-        self.expect(vec![TokenType::RightBrace]);
+        self.expect(vec![TokenType::RightBrace]).unwrap();
 
         Node::CompoundStmt { statements: nodes }
     }
@@ -128,7 +136,9 @@ impl Parser {
             pointers_counter += 1
         }
 
-        let ty_token = self.expect(vec![TokenType::Int, TokenType::U8, TokenType::U32]);
+        let ty_token = self
+            .expect(vec![TokenType::Int, TokenType::U8, TokenType::U32])
+            .unwrap();
 
         let mut ty = match ty_token.token_type {
             TokenType::Int => Type::Int,
@@ -145,12 +155,39 @@ impl Parser {
     }
 
     fn var_decl(&mut self) -> Node {
-        // let ty = self.parse_type(self.previous(1));
-        let identifier = self.expect(vec![TokenType::Identifier]);
-        self.expect(vec![TokenType::Colon]);
+        let mut identifiers = Vec::new();
+        while self.match_token(vec![TokenType::Identifier]) {
+            identifiers.push(self.previous(1));
+
+            if !self.match_token(vec![TokenType::Comma]) {
+                break;
+            }
+        }
+        self.expect(vec![TokenType::Colon]).unwrap();
         let ty = self.parse_type();
-        self.add_symbol(identifier.clone(), SymbolType::Variable, ty.clone(), None);
-        Node::GlobalVar { identifier, ty }
+
+        if identifiers.clone().len() == 1 {
+            self.add_symbol(
+                identifiers[0].clone(),
+                SymbolType::Variable,
+                ty.clone(),
+                None,
+            );
+
+            Node::GlobalVar {
+                identifier: identifiers[0].clone(),
+                ty: ty.clone(),
+            }
+        } else {
+            for identifier in &identifiers {
+                self.add_symbol(identifier.clone(), SymbolType::Variable, ty.clone(), None);
+            }
+
+            Node::GlobalVarMany {
+                identifiers,
+                ty: ty.clone(),
+            }
+        }
     }
 
     fn assignment(&mut self) -> Node {
@@ -186,7 +223,7 @@ impl Parser {
             );
         }
 
-        self.expect(vec![TokenType::Assign]);
+        self.expect(vec![TokenType::Assign]).unwrap();
         let expr = self.expression();
 
         // Check if the type is compatible
@@ -230,7 +267,7 @@ impl Parser {
     }
 
     fn if_statement(&mut self) -> Node {
-        self.expect(vec![TokenType::LeftParen]);
+        self.expect(vec![TokenType::LeftParen]).unwrap();
         let expr = self.expression();
         match &expr {
             Node::BinaryExpr { operator, .. } => {
@@ -249,7 +286,7 @@ impl Parser {
             }
             _ => panic!("Expected comparison operator"),
         }
-        self.expect(vec![TokenType::RightParen]);
+        self.expect(vec![TokenType::RightParen]).unwrap();
         let then_branch = self.compound_statement();
         let else_branch = if self.match_token(vec![TokenType::Else]) {
             Some(Box::new(self.compound_statement()))
@@ -578,20 +615,20 @@ impl Parser {
         false
     }
 
-    fn expect(&mut self, tokens: Vec<TokenType>) -> Token {
+    fn expect(&mut self, tokens: Vec<TokenType>) -> Result<Token, String> {
         for token in &tokens {
             if self.check(*token) {
-                return self.advance();
+                return Ok(self.advance());
             }
         }
 
-        panic!(
+        Err(format!(
             "Expected {:?} at line {} column {}, got {:?}",
             tokens,
             self.peek().line,
             self.peek().column,
             self.peek().token_type
-        );
+        ))
     }
 
     fn check(&self, token_type: TokenType) -> bool {
@@ -658,7 +695,7 @@ impl Parser {
     }
 
     fn while_statement(&mut self) -> Node {
-        self.expect(vec![TokenType::LeftParen]);
+        self.expect(vec![TokenType::LeftParen]).unwrap();
         let expr = self.expression();
         match &expr {
             Node::BinaryExpr { operator, .. } => {
@@ -677,7 +714,7 @@ impl Parser {
             }
             _ => panic!("Expected comparison operator"),
         }
-        self.expect(vec![TokenType::RightParen]);
+        self.expect(vec![TokenType::RightParen]).unwrap();
         let body = self.compound_statement();
 
         Node::WhileStmt {
@@ -687,14 +724,14 @@ impl Parser {
     }
 
     fn for_statement(&mut self) -> Node {
-        self.expect(vec![TokenType::LeftParen]);
+        self.expect(vec![TokenType::LeftParen]).unwrap();
         let initializer = if self.match_token(vec![TokenType::SemiColon]) {
             None
         // } else if self.match_token(vec![TokenType::Let]) {
         //     Some(self.var_decl())
         } else if self.match_token(vec![TokenType::Identifier]) {
             let node = self.assignment();
-            self.expect(vec![TokenType::SemiColon]);
+            self.expect(vec![TokenType::SemiColon]).unwrap();
             Some(node)
         } else {
             panic!("Expected identifier");
@@ -708,14 +745,14 @@ impl Parser {
         } else {
             self.expression()
         };
-        self.expect(vec![TokenType::SemiColon]);
+        self.expect(vec![TokenType::SemiColon]).unwrap();
 
         let increment = if self.check(TokenType::RightParen) {
             None
         } else {
             Some(self.single_statement())
         };
-        self.expect(vec![TokenType::RightParen]);
+        self.expect(vec![TokenType::RightParen]).unwrap();
 
         let mut body = self.compound_statement();
 
@@ -740,8 +777,8 @@ impl Parser {
     }
 
     fn fn_decl(&mut self) -> Node {
-        self.expect(vec![TokenType::Fn]);
-        let identifier = self.expect(vec![TokenType::Identifier]);
+        self.expect(vec![TokenType::Fn]).unwrap();
+        let identifier = self.expect(vec![TokenType::Identifier]).unwrap();
         let end_label = Some(format!("{}{}", identifier.lexeme.clone().unwrap(), "_end"));
         let symbol = self.add_symbol(
             identifier.clone(),
@@ -749,9 +786,9 @@ impl Parser {
             Type::Int,
             end_label,
         );
-        self.expect(vec![TokenType::LeftParen]);
+        self.expect(vec![TokenType::LeftParen]).unwrap();
         // TODO: parse parameters
-        self.expect(vec![TokenType::RightParen]);
+        self.expect(vec![TokenType::RightParen]).unwrap();
 
         let mut ty: Option<Type> = None;
         if self.match_token(vec![TokenType::Colon]) {
@@ -862,7 +899,7 @@ impl Parser {
 
         let expr = self.expression();
 
-        self.expect(vec![TokenType::RightParen]);
+        self.expect(vec![TokenType::RightParen]).unwrap();
 
         Node::FnCall {
             identifier,

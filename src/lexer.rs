@@ -49,6 +49,7 @@ pub enum TokenType {
     GreaterThan,
     Colon,
     Ampersand,
+    Comma,
 
     // Double-character tokens
     Equal,
@@ -133,6 +134,7 @@ impl Lexer {
             '}' => self.add_token(TokenType::RightBrace),
             ';' => self.add_token(TokenType::SemiColon),
             ':' => self.add_token(TokenType::Colon),
+            ',' => self.add_token(TokenType::Comma),
             '=' => {
                 if self.match_char('=') {
                     self.add_token(TokenType::Equal);
