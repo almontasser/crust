@@ -2,9 +2,9 @@ fn main()
 {
   let i: int; let j: u8;
 
-  j= 20; print(j);
-  i= 10; print(i);
+  j= 20; printint(j);
+  i= 10; printint(i);
 
-  for (i= 1;   i <= 5; i= i + 1) { print(i); }
-  for (j= 253; j != 2; j= j + 1) { print(j); }
+  for (i= 1;   i <= 5; i= i + 1) { printint(i); }
+  for (j= 253; j != 2; j= j + 1) { printint(j); }
 }

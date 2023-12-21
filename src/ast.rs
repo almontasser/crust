@@ -21,9 +21,6 @@ pub enum Node {
         value: Literal,
         ty: Type,
     },
-    PrintStmt {
-        expr: Box<Node>,
-    },
     GlobalVar {
         identifier: Token,
         ty: Type,
@@ -66,7 +63,6 @@ impl Node {
             Node::BinaryExpr { ty, .. } => Some(ty.clone()),
             Node::UnaryExpr { ty, .. } => Some(ty.clone()),
             Node::LiteralExpr { ty, .. } => Some(ty.clone()),
-            Node::PrintStmt { .. } => None,
             Node::GlobalVar { ty, .. } => Some(ty.clone()),
             Node::AssignStmt { .. } => None,
             Node::CompoundStmt { .. } => None,
@@ -83,7 +79,6 @@ impl Node {
             Node::BinaryExpr { ty: t, .. } => *t = ty,
             Node::UnaryExpr { ty: t, .. } => *t = ty,
             Node::LiteralExpr { ty: t, .. } => *t = ty,
-            Node::PrintStmt { .. } => {}
             Node::GlobalVar { .. } => {}
             Node::AssignStmt { .. } => {}
             Node::CompoundStmt { .. } => {}

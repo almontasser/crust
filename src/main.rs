@@ -16,21 +16,13 @@ fn main() {
     }
 
     let source = std::fs::read_to_string(&args[1]).expect("Failed to read file");
+    // let source = std::fs::read_to_string("tests/test01").expect("Failed to read file");
 
     // let source = String::from(
-    //     "
-    //     fn fred(): int {
-    //         return 20;
+    //     "fn main() {
+    //         printint(1);
     //       }
-
-    //       fn main(): int {
-    //         let result: int;
-    //         print(10);
-    //         result= fred(15);
-    //         print(result);
-    //         print(fred(15)+10);
-    //         return 0;
-    //       }",
+    //     ",
     // );
 
     let mut lexer = lexer::Lexer::new(source);

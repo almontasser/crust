@@ -29,7 +29,6 @@ pub enum TokenType {
     If,
     Int,
     Let,
-    Print,
     Return,
     U8,
     U32,
@@ -49,12 +48,14 @@ pub enum TokenType {
     LessThan,
     GreaterThan,
     Colon,
+    Ampersand,
 
     // Double-character tokens
     Equal,
     NotEqual,
     LessThanOrEqual,
     GreaterThanOrEqual,
+    LogicalAnd,
 
     Widen,
 
@@ -88,7 +89,6 @@ impl Lexer {
                 keywords.insert(String::from("if"), TokenType::If);
                 keywords.insert(String::from("int"), TokenType::Int);
                 keywords.insert(String::from("let"), TokenType::Let);
-                keywords.insert(String::from("print"), TokenType::Print);
                 keywords.insert(String::from("return"), TokenType::Return);
                 keywords.insert(String::from("u8"), TokenType::U8);
                 keywords.insert(String::from("u32"), TokenType::U32);
@@ -159,6 +159,13 @@ impl Lexer {
                     self.add_token(TokenType::GreaterThanOrEqual);
                 } else {
                     self.add_token(TokenType::GreaterThan);
+                }
+            }
+            '&' => {
+                if self.match_char('&') {
+                    self.add_token(TokenType::LogicalAnd);
+                } else {
+                    self.add_token(TokenType::Ampersand);
                 }
             }
             ' ' | '\t' | '\r' => {}

@@ -34,7 +34,22 @@ impl Parser {
             tokens,
             current: 0,
             nodes: Vec::new(),
-            symbols: Vec::new(),
+            symbols: vec![
+                // builtin functions
+                // add print function
+                Symbol {
+                    identifier: Token {
+                        token_type: TokenType::Identifier,
+                        lexeme: Some(String::from("printint")),
+                        line: 0,
+                        column: 0,
+                        value: None,
+                    },
+                    structure: SymbolType::Function,
+                    ty: Some(Type::Int),
+                    end_label: None,
+                },
+            ],
             current_fn: None,
         }
     }
@@ -60,8 +75,7 @@ impl Parser {
         while !self.check(TokenType::RightBrace) && !self.is_at_end() {
             let node = self.single_statement();
             match node {
-                Node::PrintStmt { .. }
-                | Node::AssignStmt { .. }
+                Node::AssignStmt { .. }
                 | Node::GlobalVar { .. }
                 | Node::FnCall { .. }
                 | Node::ReturnStmt { .. } => {
@@ -78,10 +92,7 @@ impl Parser {
     }
 
     fn single_statement(&mut self) -> Node {
-        // expect print
-        if self.match_token(vec![TokenType::Print]) {
-            return self.print_statement();
-        } else if self.match_token(vec![TokenType::Let]) {
+        if self.match_token(vec![TokenType::Let]) {
             return self.var_decl();
         } else if self.match_token(vec![TokenType::Identifier]) {
             return self.assignment();
@@ -105,20 +116,39 @@ impl Parser {
         }
     }
 
-    fn parse_type(&self, token: Token) -> Type {
-        match token.token_type {
+    fn parse_type(&mut self) -> Type {
+        // a type of a variable is like these examples:
+        // let x: int;
+        // let y: u8;
+        // let z: *u32; // pointer to u32
+        // let a: **int; // pointer to pointer to int
+
+        let mut pointers_counter: u8 = 0;
+        while self.match_token(vec![TokenType::Mul]) {
+            pointers_counter += 1
+        }
+
+        let ty_token = self.expect(vec![TokenType::Int, TokenType::U8, TokenType::U32]);
+
+        let mut ty = match ty_token.token_type {
             TokenType::Int => Type::Int,
             TokenType::U8 => Type::U8,
+            TokenType::U32 => Type::U32,
             _ => panic!("Expected type"),
+        };
+
+        for _ in 0..pointers_counter {
+            ty = ty.pointer_to();
         }
+
+        ty
     }
 
     fn var_decl(&mut self) -> Node {
         // let ty = self.parse_type(self.previous(1));
         let identifier = self.expect(vec![TokenType::Identifier]);
         self.expect(vec![TokenType::Colon]);
-        let ty_token = self.expect(vec![TokenType::Int, TokenType::U8]);
-        let ty = self.parse_type(ty_token);
+        let ty = self.parse_type();
         self.add_symbol(identifier.clone(), SymbolType::Variable, ty.clone(), None);
         Node::GlobalVar { identifier, ty }
     }
@@ -231,48 +261,6 @@ impl Parser {
             condition: Box::new(expr),
             then_branch: Box::new(then_branch),
             else_branch,
-        }
-    }
-
-    fn print_statement(&mut self) -> Node {
-        self.expect(vec![TokenType::LeftParen]);
-        let expr = self.expression();
-        self.expect(vec![TokenType::RightParen]);
-        // Check if the type is compatible
-        let mut widen_left = false;
-        let mut widen_right = false;
-        if !self.type_compatible(
-            Type::Int,
-            expr.ty().unwrap(),
-            false,
-            &mut widen_left,
-            &mut widen_right,
-        ) {
-            panic!(
-                "Incompatible types at line {} column {}",
-                self.previous(1).line,
-                self.previous(1).column
-            );
-        }
-
-        if widen_right {
-            return Node::PrintStmt {
-                expr: Box::new(Node::UnaryExpr {
-                    operator: Token {
-                        token_type: TokenType::Widen,
-                        lexeme: None,
-                        line: self.previous(1).line,
-                        column: self.previous(1).column,
-                        value: None,
-                    },
-                    right: Box::new(expr.clone()),
-                    ty: expr.ty().unwrap(),
-                }),
-            };
-        } else {
-            return Node::PrintStmt {
-                expr: Box::new(expr),
-            };
         }
     }
 
@@ -454,7 +442,67 @@ impl Parser {
             };
         }
 
-        self.primary()
+        self.prefix()
+    }
+
+    fn prefix(&mut self) -> Node {
+        let mut node: Node;
+        if self.match_token(vec![TokenType::Ampersand]) {
+            node = self.prefix();
+
+            // ensure that the node is an identifier
+            match &node {
+                Node::LiteralExpr { value, .. } => match value {
+                    Literal::Identifier(_) => {}
+                    _ => panic!("Expected identifier"),
+                },
+                _ => panic!("Expected identifier"),
+            }
+
+            node = Node::UnaryExpr {
+                operator: Token {
+                    token_type: TokenType::Ampersand,
+                    lexeme: None,
+                    line: self.previous(1).line,
+                    column: self.previous(1).column,
+                    value: None,
+                },
+                right: Box::new(node.clone()),
+                ty: node.ty().unwrap().pointer_to(),
+            };
+        } else if self.match_token(vec![TokenType::Mul]) {
+            node = self.prefix();
+
+            // ensure that the node is an identifier or a dereference
+            match &node {
+                Node::LiteralExpr { value, .. } => match value {
+                    Literal::Identifier(_) => {}
+                    _ => panic!("Expected identifier"),
+                },
+                Node::UnaryExpr { operator, .. } => {
+                    if operator.token_type != TokenType::Ampersand {
+                        panic!("Expected identifier");
+                    }
+                }
+                _ => panic!("Expected identifier"),
+            }
+
+            node = Node::UnaryExpr {
+                operator: Token {
+                    token_type: TokenType::Mul,
+                    lexeme: None,
+                    line: self.previous(1).line,
+                    column: self.previous(1).column,
+                    value: None,
+                },
+                right: Box::new(node.clone()),
+                ty: node.ty().unwrap().value_at(),
+            };
+        } else {
+            node = self.primary();
+        }
+
+        node
     }
 
     fn primary(&mut self) -> Node {
@@ -705,8 +753,7 @@ impl Parser {
 
         let mut ty: Option<Type> = None;
         if self.match_token(vec![TokenType::Colon]) {
-            let ty_token = self.expect(vec![TokenType::Int, TokenType::U8, TokenType::U32]);
-            ty = Some(self.parse_type(ty_token));
+            ty = Some(self.parse_type());
         }
         self.current_fn = Some(symbol.clone());
         let body = self.compound_statement();

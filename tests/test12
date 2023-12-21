@@ -1,0 +1,9 @@
+fn fred(): int {
+  return 5;
+}
+
+fn main() {
+  let x: int;
+  x= fred(2);
+  printint(x);
+}

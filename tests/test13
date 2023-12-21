@@ -1,0 +1,11 @@
+fn fred(): int {
+  return 56;
+}
+
+fn main() {
+  let dummy: int;
+  let result: int;
+  dummy= printint(23);
+  result= fred(10);
+  dummy= printint(result);
+}

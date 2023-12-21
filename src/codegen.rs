@@ -74,21 +74,34 @@ impl CodeGen {
                 right,
                 ty,
             } => {
-                let right_node = self.generate_node(*right.clone());
-
                 match operator.token_type {
                     TokenType::Sub => {
+                        let right_node = self.generate_node(*right.clone());
                         self.load(0, ty);
                         self.subtract(0, right_node)
                     }
-                    TokenType::Widen => self.widen(right_node, right.ty().unwrap(), ty),
+                    TokenType::Widen => {
+                        let right_node = self.generate_node(*right.clone());
+                        self.widen(right_node, right.ty().unwrap(), ty)
+                    }
+                    TokenType::Ampersand => {
+                        // get identifier
+                        let identifier = match &*right {
+                            Node::LiteralExpr { value, .. } => match value {
+                                Literal::Identifier(i) => i,
+                                _ => panic!("Unexpected token {:?}", right),
+                            },
+                            _ => panic!("Unexpected token {:?}", right),
+                        };
+
+                        self.address_of(identifier.to_string())
+                    }
+                    TokenType::Mul => {
+                        let right_node = self.generate_node(*right.clone());
+                        self.dereference(right_node, right.ty().unwrap())
+                    }
                     _ => panic!("Unexpected token {:?}", operator),
                 }
-            }
-            Node::PrintStmt { expr } => {
-                let register = self.generate_node(*expr);
-                self.printint(register);
-                0
             }
             Node::GlobalVar { identifier, ty } => {
                 self.define_global(identifier.lexeme.unwrap(), ty);
@@ -121,7 +134,16 @@ impl CodeGen {
                 identifier,
                 expr,
                 ty,
-            } => self.function_call(identifier, expr, ty),
+            } => {
+                // TODO: fix ths hack
+                let r = self.function_call(identifier.clone(), expr, ty);
+                if identifier.lexeme.unwrap() == "printint" {
+                    self.free_register(r);
+                    0
+                } else {
+                    r
+                }
+            }
             Node::ReturnStmt { expr, fn_name } => self.return_stmt(expr, fn_name),
         }
     }
@@ -161,7 +183,12 @@ impl CodeGen {
 
     fn load_global(&mut self, identifier: String, ty: Type) -> usize {
         let r = self.allocate_register();
-        if ty == Type::Int {
+        if ty == Type::Int
+            || ty == Type::PInt
+            || ty == Type::PU8
+            || ty == Type::PU32
+            || ty == Type::U32
+        {
             self.assembly
                 .push_str(&format!("\tmovq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
         } else if ty == Type::U8 {
@@ -182,7 +209,7 @@ impl CodeGen {
     }
 
     fn store(&mut self, register: usize, identifier: String, ty: Type) {
-        if ty == Type::Int {
+        if ty == Type::Int || ty == Type::PInt || ty == Type::PU8 || ty == Type::PU32 {
             self.assembly.push_str(&format!(
                 "\tmovq\t{}, {}\n",
                 REGISTER_NAMES[register], identifier
@@ -477,5 +504,30 @@ impl CodeGen {
             .push_str(&format!("\tmovq\t{}, %rax\n", REGISTER_NAMES[register]));
         self.free_register(register);
         0
+    }
+
+    fn address_of(&mut self, ident: String) -> usize {
+        let r = self.allocate_register();
+
+        self.assembly
+            .push_str(&format!("\tleaq\t{}(%rip), {}\n", ident, REGISTER_NAMES[r]));
+
+        r
+    }
+
+    fn dereference(&mut self, register: usize, ty: Type) -> usize {
+        match ty {
+            Type::PInt | Type::PU32 => self.assembly.push_str(&format!(
+                "\tmovq\t({}), {}\n",
+                REGISTER_NAMES[register], REGISTER_NAMES[register]
+            )),
+            Type::PU8 => self.assembly.push_str(&format!(
+                "\tmovzbq\t({}), {}\n",
+                REGISTER_NAMES[register], REGISTER_NAMES[register]
+            )),
+            _ => panic!("Unexpected type {:?}", ty),
+        }
+
+        register
     }
 }

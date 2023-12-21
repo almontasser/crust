@@ -1,5 +1,5 @@
 fn main() {
-  print(12 * 3);
-  print(18 - 2 * 4);
-  print(1 + 2 + 9 - 5/2 + 3*5);
+    printint(12 * 3);
+    printint(18 - 2 * 4);
+    printint(1 + 2 + 9 - 5 / 2 + 3 * 5);
 }
