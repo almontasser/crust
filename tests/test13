@@ -1,10 +1,10 @@
-fn fred(): int {
+fn fred(): u8 {
   return 56;
 }
 
 fn main() {
-  let dummy: int;
-  let result: int;
+  let dummy: u8;
+  let result: u8;
   dummy= printint(23);
   result= fred(10);
   dummy= printint(result);

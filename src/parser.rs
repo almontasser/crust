@@ -1,7 +1,7 @@
 use core::panic;
 
 use crate::{
-    ast::Node,
+    ast::{LiteralValue, Node},
     lexer::{Literal, Token, TokenType},
     types::Type,
 };
@@ -46,7 +46,7 @@ impl Parser {
                         value: None,
                     },
                     structure: SymbolType::Function,
-                    ty: Some(Type::Int),
+                    ty: Some(Type::U8),
                     end_label: None,
                 },
             ],
@@ -137,13 +137,19 @@ impl Parser {
         }
 
         let ty_token = self
-            .expect(vec![TokenType::Int, TokenType::U8, TokenType::U32])
+            .expect(vec![
+                TokenType::U8,
+                TokenType::U16,
+                TokenType::U32,
+                TokenType::U64,
+            ])
             .unwrap();
 
         let mut ty = match ty_token.token_type {
-            TokenType::Int => Type::Int,
             TokenType::U8 => Type::U8,
+            TokenType::U16 => Type::U16,
             TokenType::U32 => Type::U32,
+            TokenType::U64 => Type::U64,
             _ => panic!("Expected type"),
         };
 
@@ -170,7 +176,7 @@ impl Parser {
             self.add_symbol(
                 identifiers[0].clone(),
                 SymbolType::Variable,
-                ty.clone(),
+                Some(ty.clone()),
                 None,
             );
 
@@ -180,7 +186,12 @@ impl Parser {
             }
         } else {
             for identifier in &identifiers {
-                self.add_symbol(identifier.clone(), SymbolType::Variable, ty.clone(), None);
+                self.add_symbol(
+                    identifier.clone(),
+                    SymbolType::Variable,
+                    Some(ty.clone()),
+                    None,
+                );
             }
 
             Node::GlobalVarMany {
@@ -490,7 +501,7 @@ impl Parser {
             // ensure that the node is an identifier
             match &node {
                 Node::LiteralExpr { value, .. } => match value {
-                    Literal::Identifier(_) => {}
+                    LiteralValue::Identifier(_) => {}
                     _ => panic!("Expected identifier"),
                 },
                 _ => panic!("Expected identifier"),
@@ -513,7 +524,7 @@ impl Parser {
             // ensure that the node is an identifier or a dereference
             match &node {
                 Node::LiteralExpr { value, .. } => match value {
-                    Literal::Identifier(_) => {}
+                    LiteralValue::Identifier(_) => {}
                     _ => panic!("Expected identifier"),
                 },
                 Node::UnaryExpr { operator, .. } => {
@@ -548,20 +559,16 @@ impl Parser {
                 Some(Literal::Integer(val)) => val,
                 _ => panic!("Expected integer"),
             };
-            return Node::LiteralExpr {
-                value: if val <= u8::MAX as u64 {
-                    Literal::U8(val as u8)
-                } else if val <= u32::MAX as u64 {
-                    Literal::U32(val as u32)
-                } else {
-                    Literal::Integer(val)
-                },
-                ty: if val <= u8::MAX as u64 {
-                    Type::U8
-                } else {
-                    Type::Int
-                },
+            let (value, ty) = if val <= u8::MAX as u64 {
+                (LiteralValue::U8(val as u8), Type::U8)
+            } else if val <= u16::MAX as u64 {
+                (LiteralValue::U16(val as u16), Type::U16)
+            } else if val <= u32::MAX as u64 {
+                (LiteralValue::U32(val as u32), Type::U32)
+            } else {
+                (LiteralValue::U64(val), Type::U64)
             };
+            return Node::LiteralExpr { value, ty: ty };
         } else if self.match_token(vec![TokenType::Identifier]) {
             let identifier = self.previous(1);
             match self.find_symbol(identifier.clone()) {
@@ -584,7 +591,7 @@ impl Parser {
                         }
                     }
                     return Node::LiteralExpr {
-                        value: Literal::Identifier(identifier.lexeme.clone().unwrap()),
+                        value: LiteralValue::Identifier(identifier.lexeme.clone().unwrap()),
                         ty: symbol.ty.unwrap(),
                     };
                 }
@@ -659,7 +666,7 @@ impl Parser {
         &mut self,
         identifier: Token,
         structure: SymbolType,
-        ty: Type,
+        ty: Option<Type>,
         end_label: Option<String>,
     ) -> Symbol {
         let symbol = self.find_symbol(identifier.clone());
@@ -675,7 +682,7 @@ impl Parser {
         let symbol = Symbol {
             identifier,
             structure,
-            ty: Some(ty),
+            ty: ty,
             end_label,
         };
 
@@ -739,7 +746,7 @@ impl Parser {
 
         let condition = if self.check(TokenType::SemiColon) {
             Node::LiteralExpr {
-                value: Literal::Integer(1),
+                value: LiteralValue::U8(1),
                 ty: Type::U8,
             }
         } else {
@@ -780,12 +787,6 @@ impl Parser {
         self.expect(vec![TokenType::Fn]).unwrap();
         let identifier = self.expect(vec![TokenType::Identifier]).unwrap();
         let end_label = Some(format!("{}{}", identifier.lexeme.clone().unwrap(), "_end"));
-        let symbol = self.add_symbol(
-            identifier.clone(),
-            SymbolType::Function,
-            Type::Int,
-            end_label,
-        );
         self.expect(vec![TokenType::LeftParen]).unwrap();
         // TODO: parse parameters
         self.expect(vec![TokenType::RightParen]).unwrap();
@@ -794,6 +795,12 @@ impl Parser {
         if self.match_token(vec![TokenType::Colon]) {
             ty = Some(self.parse_type());
         }
+        let symbol = self.add_symbol(
+            identifier.clone(),
+            SymbolType::Function,
+            ty.clone(),
+            end_label,
+        );
         self.current_fn = Some(symbol.clone());
         let body = self.compound_statement();
         // ensure that the function returns a value if it has a return type in the last statement

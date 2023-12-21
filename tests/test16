@@ -1,8 +1,8 @@
-let d, f: int;
-let e: *int;
+let d, f: u8;
+let e: *u8;
 
-fn main(): int {
-  let a, b, c: int;
+fn main(): u8 {
+  let a, b, c: u8;
   b= 3; c= 5; a= b + c * 10;
   printint(a);
 

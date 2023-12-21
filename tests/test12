@@ -1,9 +1,9 @@
-fn fred(): int {
+fn fred(): u8 {
   return 5;
 }
 
 fn main() {
-  let x: int;
+  let x: u8;
   x= fred(2);
   printint(x);
 }

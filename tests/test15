@@ -1,6 +1,6 @@
-fn main(): int {
+fn main(): u8 {
   let  a: u8;  let b: *u8;  let c: u8;
-  let  d: int; let e: *int; let f: int;
+  let  d: u8; let e: *u8; let f: u8;
 
   a= 18; printint(a);
   b= &a; c= *b; printint(c);

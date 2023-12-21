@@ -1,5 +1,5 @@
 fn main() {
-  let i: int;
+  let i: u8;
   i = 1;
   while (i <= 10) {
     printint(i);

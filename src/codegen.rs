@@ -1,6 +1,6 @@
 use crate::{
-    ast::Node,
-    lexer::{Literal, Token, TokenType},
+    ast::{LiteralValue, Node},
+    lexer::{Token, TokenType},
     parser::Symbol,
     types::Type,
 };
@@ -14,6 +14,7 @@ pub struct CodeGen {
 
 const REGISTER_NAMES: [&str; 4] = ["%r8", "%r9", "%r10", "%r11"];
 const BYTE_REGISTER_NAMES: [&str; 4] = ["%r8b", "%r9b", "%r10b", "%r11b"];
+const WORD_REGISTER_NAMES: [&str; 4] = ["%r8w", "%r9w", "%r10w", "%r11w"];
 const DWORD_REGISTER_NAMES: [&str; 4] = ["%r8d", "%r9d", "%r10d", "%r11d"];
 
 impl CodeGen {
@@ -39,10 +40,11 @@ impl CodeGen {
     fn generate_node(&mut self, node: Node) -> usize {
         match node {
             Node::LiteralExpr { value, ty } => match value {
-                Literal::Integer(i) => self.load(i as i64, ty),
-                Literal::U8(u) => self.load(u as i64, ty),
-                Literal::U32(u) => self.load(u as i64, ty),
-                Literal::Identifier(i) => self.load_global(i, ty),
+                LiteralValue::U8(u) => self.load(u as u64, ty),
+                LiteralValue::U16(u) => self.load(u as u64, ty),
+                LiteralValue::U32(u) => self.load(u as u64, ty),
+                LiteralValue::U64(u) => self.load(u as u64, ty),
+                LiteralValue::Identifier(i) => self.load_global(i, ty),
             },
             Node::BinaryExpr {
                 left,
@@ -88,7 +90,7 @@ impl CodeGen {
                         // get identifier
                         let identifier = match &*right {
                             Node::LiteralExpr { value, .. } => match value {
-                                Literal::Identifier(i) => i,
+                                LiteralValue::Identifier(i) => i,
                                 _ => panic!("Unexpected token {:?}", right),
                             },
                             _ => panic!("Unexpected token {:?}", right),
@@ -170,7 +172,7 @@ impl CodeGen {
         self.assembly.push_str("\tret\n\n");
     }
 
-    fn load(&mut self, value: i64, _ty: Type) -> usize {
+    fn load(&mut self, value: u64, _ty: Type) -> usize {
         let r = self.allocate_register();
         self.assembly
             .push_str(&format!("\tmovq\t${}, {}\n", value, REGISTER_NAMES[r]));
@@ -179,24 +181,22 @@ impl CodeGen {
 
     fn load_global(&mut self, identifier: String, ty: Type) -> usize {
         let r = self.allocate_register();
-        if ty == Type::Int
-            || ty == Type::PInt
-            || ty == Type::PU8
-            || ty == Type::PU32
-            || ty == Type::U32
-        {
-            self.assembly
-                .push_str(&format!("\tmovq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
-        } else if ty == Type::U8 {
+        if ty == Type::U8 {
             self.assembly.push_str(&format!(
                 "\tmovzbq\t{}, {}\n",
                 identifier, REGISTER_NAMES[r]
             ));
-        } else if ty == Type::U32 {
+        } else if ty == Type::U16 {
             self.assembly.push_str(&format!(
-                "\tmovzbl\t{}, {}\n",
+                "\tmovzwl\t{}, {}\n",
                 identifier, REGISTER_NAMES[r]
             ));
+        } else if ty == Type::U32 {
+            self.assembly
+                .push_str(&format!("\tmovl\t{}, {}\n", identifier, REGISTER_NAMES[r]));
+        } else if ty == Type::U64 || ty == Type::PU8 || ty == Type::PU16 || ty == Type::PU32 {
+            self.assembly
+                .push_str(&format!("\tmovq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
         } else {
             panic!("Unexpected type {:?}", ty);
         }
@@ -205,20 +205,25 @@ impl CodeGen {
     }
 
     fn store(&mut self, register: usize, identifier: String, ty: Type) {
-        if ty == Type::Int || ty == Type::PInt || ty == Type::PU8 || ty == Type::PU32 {
-            self.assembly.push_str(&format!(
-                "\tmovq\t{}, {}\n",
-                REGISTER_NAMES[register], identifier
-            ));
-        } else if ty == Type::U8 {
+        if ty == Type::U8 {
             self.assembly.push_str(&format!(
                 "\tmovb\t{}, {}\n",
                 BYTE_REGISTER_NAMES[register], identifier
+            ));
+        } else if ty == Type::U16 {
+            self.assembly.push_str(&format!(
+                "\tmovw\t{}, {}\n",
+                WORD_REGISTER_NAMES[register], identifier
             ));
         } else if ty == Type::U32 {
             self.assembly.push_str(&format!(
                 "\tmovl\t{}, {}\n",
                 DWORD_REGISTER_NAMES[register], identifier
+            ));
+        } else if ty == Type::U64 || ty == Type::PU8 || ty == Type::PU16 || ty == Type::PU32 {
+            self.assembly.push_str(&format!(
+                "\tmovq\t{}, {}\n",
+                REGISTER_NAMES[register], identifier
             ));
         } else {
             panic!("Unexpected type {:?}", ty);
@@ -485,20 +490,16 @@ impl CodeGen {
     fn return_stmt(&mut self, expr: Box<Node>, fn_name: Symbol) -> usize {
         let register = self.generate_node(*expr);
         match fn_name.ty.clone().unwrap() {
-            Type::Int => {
-                self.assembly.push_str(&format!(
-                    "\tmovl\t{}, %eax\n",
-                    DWORD_REGISTER_NAMES[register]
-                ));
-            }
-            Type::PInt | Type::PU8 | Type::PU32 => {
-                self.assembly
-                    .push_str(&format!("\tmovq\t{}, %rax\n", REGISTER_NAMES[register]));
-            }
             Type::U8 => {
                 self.assembly.push_str(&format!(
                     "\tmovzbl\t{}, %eax\n",
                     BYTE_REGISTER_NAMES[register]
+                ));
+            }
+            Type::U16 => {
+                self.assembly.push_str(&format!(
+                    "\tmovzwl\t{}, %eax\n",
+                    WORD_REGISTER_NAMES[register]
                 ));
             }
             Type::U32 => {
@@ -506,6 +507,10 @@ impl CodeGen {
                     "\tmovl\t{}, %eax\n",
                     DWORD_REGISTER_NAMES[register]
                 ));
+            }
+            Type::U64 | Type::PU8 | Type::PU16 | Type::PU32 | Type::PU64 => {
+                self.assembly
+                    .push_str(&format!("\tmovq\t{}, %rax\n", REGISTER_NAMES[register]));
             }
         }
         self.assembly
@@ -525,12 +530,20 @@ impl CodeGen {
 
     fn dereference(&mut self, register: usize, ty: Type) -> usize {
         match ty {
-            Type::PInt | Type::PU32 => self.assembly.push_str(&format!(
-                "\tmovq\t({}), {}\n",
-                REGISTER_NAMES[register], REGISTER_NAMES[register]
-            )),
             Type::PU8 => self.assembly.push_str(&format!(
                 "\tmovzbq\t({}), {}\n",
+                REGISTER_NAMES[register], REGISTER_NAMES[register]
+            )),
+            Type::PU16 => self.assembly.push_str(&format!(
+                "\tmovzwl\t({}), {}\n",
+                REGISTER_NAMES[register], REGISTER_NAMES[register]
+            )),
+            Type::PU32 => self.assembly.push_str(&format!(
+                "\tmovl\t({}), {}\n",
+                REGISTER_NAMES[register], REGISTER_NAMES[register]
+            )),
+            Type::PU64 => self.assembly.push_str(&format!(
+                "\tmovq\t({}), {}\n",
                 REGISTER_NAMES[register], REGISTER_NAMES[register]
             )),
             _ => panic!("Unexpected type {:?}", ty),

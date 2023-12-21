@@ -3,8 +3,6 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Integer(u64),
-    U8(u8),
-    U32(u32),
     Identifier(String),
 }
 
@@ -27,11 +25,12 @@ pub enum TokenType {
     Fn,
     For,
     If,
-    Int,
     Let,
     Return,
     U8,
+    U16,
     U32,
+    U64,
     While,
 
     // Single-character tokens
@@ -88,11 +87,12 @@ impl Lexer {
                 keywords.insert(String::from("fn"), TokenType::Fn);
                 keywords.insert(String::from("for"), TokenType::For);
                 keywords.insert(String::from("if"), TokenType::If);
-                keywords.insert(String::from("int"), TokenType::Int);
                 keywords.insert(String::from("let"), TokenType::Let);
                 keywords.insert(String::from("return"), TokenType::Return);
                 keywords.insert(String::from("u8"), TokenType::U8);
+                keywords.insert(String::from("u16"), TokenType::U16);
                 keywords.insert(String::from("u32"), TokenType::U32);
+                keywords.insert(String::from("u64"), TokenType::U64);
                 keywords.insert(String::from("while"), TokenType::While);
                 keywords
             },

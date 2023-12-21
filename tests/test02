@@ -1,6 +1,6 @@
 fn main() {
-  let fred: int;
-  let jim: int;
+  let fred: u8;
+  let jim: u8;
   fred= 5;
   jim= 12;
   printint(fred + jim);
