@@ -187,13 +187,11 @@ impl CodeGen {
                 identifier, REGISTER_NAMES[r]
             ));
         } else if ty == Type::U16 {
-            self.assembly.push_str(&format!(
-                "\tmovzwl\t{}, {}\n",
-                identifier, REGISTER_NAMES[r]
-            ));
+            self.assembly
+                .push_str(&format!("\tmovzx\t{}, {}\n", identifier, REGISTER_NAMES[r]));
         } else if ty == Type::U32 {
             self.assembly
-                .push_str(&format!("\tmovl\t{}, {}\n", identifier, REGISTER_NAMES[r]));
+                .push_str(&format!("\tmovq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
         } else if ty == Type::U64 || ty == Type::PU8 || ty == Type::PU16 || ty == Type::PU32 {
             self.assembly
                 .push_str(&format!("\tmovq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
