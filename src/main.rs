@@ -9,7 +9,7 @@ mod lexer;
 mod parser;
 mod types;
 
-fn print_node(node: Node, ident: u8) {
+fn _print_node(node: Node, ident: u8) {
     for _ in 0..ident {
         print!("  ");
     }
@@ -19,55 +19,53 @@ fn print_node(node: Node, ident: u8) {
             left,
             operator,
             right,
-            ty,
+            ..
         } => {
             println!("BinaryExpr");
-            print_node(*left, ident + 1);
+            _print_node(*left, ident + 1);
             for _ in 0..ident + 1 {
                 print!("  ");
             }
             println!("operator: {:?}", operator);
-            print_node(*right, ident + 1);
+            _print_node(*right, ident + 1);
         }
         Node::UnaryExpr {
-            operator,
-            right,
-            ty,
+            operator, right, ..
         } => {
             println!("UnaryExpr");
             for _ in 0..ident + 1 {
                 print!("  ");
             }
             println!("operator: {:?}", operator);
-            print_node(*right, ident + 1);
+            _print_node(*right, ident + 1);
         }
-        Node::WidenExpr { right, ty } => {
+        Node::WidenExpr { right, .. } => {
             println!("WidenExpr");
-            print_node(*right, ident + 1);
+            _print_node(*right, ident + 1);
         }
-        Node::ScaleExpr { right, size, ty } => {
+        Node::ScaleExpr { right, size, .. } => {
             println!("ScaleExpr");
             for _ in 0..ident + 1 {
                 print!("  ");
             }
             println!("size: {}", size);
-            print_node(*right, ident + 1);
+            _print_node(*right, ident + 1);
         }
-        Node::LiteralExpr { value, ty } => {
+        Node::LiteralExpr { value, .. } => {
             println!("LiteralExpr");
             for _ in 0..ident + 1 {
                 print!("  ");
             }
             println!("value: {:?}", value);
         }
-        Node::GlobalVar { identifier, ty } => {
+        Node::GlobalVar { identifier, .. } => {
             println!("GlobalVar");
             for _ in 0..ident + 1 {
                 print!("  ");
             }
             println!("identifier: {:?}", identifier);
         }
-        Node::GlobalVarMany { identifiers, ty } => {
+        Node::GlobalVarMany { identifiers, .. } => {
             println!("GlobalVarMany");
             for _ in 0..ident + 1 {
                 print!("  ");
@@ -80,7 +78,7 @@ fn print_node(node: Node, ident: u8) {
                 print!("  ");
             }
             println!("identifier: {:?}", identifier);
-            print_node(*expr, ident + 1);
+            _print_node(*expr, ident + 1);
         }
         Node::CompoundStmt { statements } => {
             println!("CompoundStmt");
@@ -89,7 +87,7 @@ fn print_node(node: Node, ident: u8) {
             }
             println!("statements:");
             for statement in statements {
-                print_node(statement, ident + 2);
+                _print_node(statement, ident + 2);
             }
         }
         Node::IfStmt {
@@ -98,16 +96,16 @@ fn print_node(node: Node, ident: u8) {
             else_branch,
         } => {
             println!("IfStmt");
-            print_node(*condition, ident + 1);
-            print_node(*then_branch, ident + 1);
+            _print_node(*condition, ident + 1);
+            _print_node(*then_branch, ident + 1);
             if let Some(else_branch) = else_branch {
-                print_node(*else_branch, ident + 1);
+                _print_node(*else_branch, ident + 1);
             }
         }
         Node::WhileStmt { condition, body } => {
             println!("WhileStmt");
-            print_node(*condition, ident + 1);
-            print_node(*body, ident + 1);
+            _print_node(*condition, ident + 1);
+            _print_node(*body, ident + 1);
         }
         Node::FnDecl {
             identifier,
@@ -125,19 +123,17 @@ fn print_node(node: Node, ident: u8) {
                 }
                 println!("return_type: {:?}", return_type);
             }
-            print_node(*body, ident + 1);
+            _print_node(*body, ident + 1);
         }
         Node::FnCall {
-            identifier,
-            expr,
-            ty,
+            identifier, expr, ..
         } => {
             println!("FnCall");
             for _ in 0..ident + 1 {
                 print!("  ");
             }
             println!("identifier: {:?}", identifier);
-            print_node(*expr, ident + 1);
+            _print_node(*expr, ident + 1);
         }
         Node::ReturnStmt { expr, fn_name } => {
             println!("ReturnStmt");
@@ -145,7 +141,7 @@ fn print_node(node: Node, ident: u8) {
                 print!("  ");
             }
             println!("fn_name: {:?}", fn_name);
-            print_node(*expr, ident + 1);
+            _print_node(*expr, ident + 1);
         }
     }
 }
@@ -173,7 +169,7 @@ fn main() {
     let nodes = parser.parse();
 
     // for node in nodes.clone() {
-    //     print_node(node, 0);
+    //     _print_node(node, 0);
     // }
 
     let mut codegen = CodeGen::new(nodes.clone());
