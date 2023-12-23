@@ -598,7 +598,7 @@ impl CodeGen {
                 REGISTER_NAMES[register], REGISTER_NAMES[register]
             )),
             Type::PU16 => self.assembly.text.push_str(&format!(
-                "\tmovzwl\t({}), {}\n",
+                "\tmovzx\t({}), {}\n",
                 REGISTER_NAMES[register], REGISTER_NAMES[register]
             )),
             Type::PU32 => self.assembly.text.push_str(&format!(
