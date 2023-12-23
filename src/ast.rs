@@ -22,6 +22,15 @@ pub enum Node {
         right: Box<Node>,
         ty: Type,
     },
+    WidenExpr {
+        right: Box<Node>,
+        ty: Type,
+    },
+    ScaleExpr {
+        right: Box<Node>,
+        size: usize,
+        ty: Type,
+    },
     LiteralExpr {
         value: LiteralValue,
         ty: Type,
@@ -71,6 +80,8 @@ impl Node {
         match self {
             Node::BinaryExpr { ty, .. } => Some(ty.clone()),
             Node::UnaryExpr { ty, .. } => Some(ty.clone()),
+            Node::WidenExpr { ty, .. } => Some(ty.clone()),
+            Node::ScaleExpr { ty, .. } => Some(ty.clone()),
             Node::LiteralExpr { ty, .. } => Some(ty.clone()),
             Node::GlobalVar { ty, .. } => Some(ty.clone()),
             Node::GlobalVarMany { ty, .. } => Some(ty.clone()),

@@ -235,45 +235,20 @@ impl Parser {
         }
 
         self.expect(vec![TokenType::Assign]).unwrap();
-        let expr = self.expression();
+        let mut expr = self.expression();
 
-        // Check if the type is compatible
-        let mut widen_left = false;
-        let mut widen_right = false;
-        if !self.type_compatible(
-            expr.ty().unwrap(),
-            symbol.ty.unwrap(),
-            true,
-            &mut widen_left,
-            &mut widen_right,
-        ) {
-            panic!(
+        expr = match self.modify_type(expr, symbol.ty.unwrap(), None) {
+            Some(node) => node,
+            None => panic!(
                 "Incompatible types at line {} column {}",
                 self.previous(1).line,
                 self.previous(1).column
-            );
-        }
+            ),
+        };
 
-        if widen_left {
-            return Node::AssignStmt {
-                identifier,
-                expr: Box::new(Node::UnaryExpr {
-                    operator: Token {
-                        token_type: TokenType::Widen,
-                        lexeme: None,
-                        line: self.previous(1).line,
-                        column: self.previous(1).column,
-                        value: None,
-                    },
-                    right: Box::new(expr.clone()),
-                    ty: expr.ty().unwrap(),
-                }),
-            };
-        } else {
-            Node::AssignStmt {
-                identifier,
-                expr: Box::new(expr),
-            }
+        Node::AssignStmt {
+            identifier,
+            expr: Box::new(expr),
         }
     }
 
@@ -357,126 +332,81 @@ impl Parser {
     }
 
     fn term(&mut self) -> Node {
-        let mut node = self.factor();
+        let mut left = self.factor();
 
         while self.match_token(vec![TokenType::Add, TokenType::Sub]) {
             let operator = self.previous(1);
             let mut right = self.factor();
-            // check if the types are compatible
-            let mut widen_left = false;
-            let mut widen_right = false;
-            if !self.type_compatible(
-                node.ty().unwrap(),
-                right.ty().unwrap(),
-                operator.token_type == TokenType::Sub,
-                &mut widen_left,
-                &mut widen_right,
-            ) {
+
+            let temp_left =
+                self.modify_type(left.clone(), right.ty().unwrap(), Some(operator.token_type));
+
+            let temp_right =
+                self.modify_type(right.clone(), left.ty().unwrap(), Some(operator.token_type));
+
+            if temp_left.is_none() && temp_right.is_none() {
                 panic!(
                     "Incompatible types at line {} column {}",
                     operator.line, operator.column
                 );
             }
 
-            if widen_left {
-                node = Node::UnaryExpr {
-                    operator: Token {
-                        token_type: TokenType::Widen,
-                        lexeme: None,
-                        line: operator.line,
-                        column: operator.column,
-                        value: None,
-                    },
-                    right: Box::new(node.clone()),
-                    ty: node.ty().unwrap(),
-                };
+            if temp_left.is_some() {
+                left = temp_left.unwrap();
             }
 
-            if widen_right {
-                right = Node::UnaryExpr {
-                    operator: Token {
-                        token_type: TokenType::Widen,
-                        lexeme: None,
-                        line: operator.line,
-                        column: operator.column,
-                        value: None,
-                    },
-                    right: Box::new(right.clone()),
-                    ty: right.ty().unwrap(),
-                };
+            if temp_right.is_some() {
+                right = temp_right.unwrap();
             }
 
-            node = Node::BinaryExpr {
-                left: Box::new(node.clone()),
+            left = Node::BinaryExpr {
+                left: Box::new(left.clone()),
                 operator,
                 right: Box::new(right),
-                ty: node.ty().unwrap(),
+                ty: left.ty().unwrap(),
             };
         }
 
-        node
+        left
     }
 
     fn factor(&mut self) -> Node {
-        let mut node = self.unary();
+        let mut left = self.unary();
 
         while self.match_token(vec![TokenType::Mul, TokenType::Div]) {
             let operator = self.previous(1);
             let mut right = self.unary();
 
-            // check if the types are compatible
-            let mut widen_left = false;
-            let mut widen_right = false;
-            if !self.type_compatible(
-                node.ty().unwrap(),
-                right.ty().unwrap(),
-                operator.token_type == TokenType::Sub,
-                &mut widen_left,
-                &mut widen_right,
-            ) {
+            let temp_left =
+                self.modify_type(left.clone(), right.ty().unwrap(), Some(operator.token_type));
+
+            let temp_right =
+                self.modify_type(right.clone(), left.ty().unwrap(), Some(operator.token_type));
+
+            if temp_left.is_none() && temp_right.is_none() {
                 panic!(
                     "Incompatible types at line {} column {}",
                     operator.line, operator.column
                 );
             }
 
-            if widen_left {
-                node = Node::UnaryExpr {
-                    operator: Token {
-                        token_type: TokenType::Widen,
-                        lexeme: None,
-                        line: operator.line,
-                        column: operator.column,
-                        value: None,
-                    },
-                    right: Box::new(node.clone()),
-                    ty: node.ty().unwrap(),
-                };
+            if temp_left.is_some() {
+                left = temp_left.unwrap();
             }
 
-            if widen_right {
-                right = Node::UnaryExpr {
-                    operator: Token {
-                        token_type: TokenType::Widen,
-                        lexeme: None,
-                        line: operator.line,
-                        column: operator.column,
-                        value: None,
-                    },
-                    right: Box::new(right.clone()),
-                    ty: right.ty().unwrap(),
-                };
+            if temp_right.is_some() {
+                right = temp_right.unwrap();
             }
 
-            node = Node::BinaryExpr {
-                left: Box::new(node.clone()),
+            left = Node::BinaryExpr {
+                left: Box::new(left.clone()),
                 operator,
                 right: Box::new(right),
-                ty: node.ty().unwrap(),
+                ty: left.ty().unwrap(),
             };
         }
 
-        node
+        left
     }
 
     fn unary(&mut self) -> Node {
@@ -845,42 +775,54 @@ impl Parser {
         }
     }
 
-    fn type_compatible(
-        &self,
-        left: Type,
-        right: Type,
-        right_only: bool,
-        widen_left: &mut bool,
-        widen_right: &mut bool,
-    ) -> bool {
-        if left == right {
-            *widen_left = false;
-            *widen_right = false;
-            return true;
-        }
+    fn modify_type(&self, node: Node, right_type: Type, op: Option<TokenType>) -> Option<Node> {
+        let left_type = node.ty().unwrap();
 
-        let left_size = left.size();
-        let right_size = right.size();
-
-        if left_size < right_size {
-            *widen_left = true;
-            *widen_right = false;
-            return true;
-        }
-
-        if left_size > right_size {
-            if right_only {
-                return false;
+        if left_type.is_int() && right_type.is_int() {
+            if left_type == right_type {
+                return Some(node);
             }
 
-            *widen_left = false;
-            *widen_right = true;
-            return true;
+            let left_size = left_type.size();
+            let right_size = right_type.size();
+
+            if left_size > right_size {
+                return None;
+            }
+
+            if right_size > left_size {
+                return Some(Node::WidenExpr {
+                    right: Box::new(node),
+                    ty: right_type,
+                });
+            }
         }
 
-        *widen_left = false;
-        *widen_right = false;
-        true
+        if left_type.is_ptr() {
+            if op.is_none() && left_type == right_type {
+                return Some(node);
+            }
+        }
+
+        // We can scale only on A_ADD or A_SUBTRACT operation
+        if let Some(op) = op {
+            if op == TokenType::Add || op == TokenType::Sub {
+                if left_type.is_int() && right_type.is_ptr() {
+                    let right_size = right_type.value_at().size();
+                    if right_size > 1 {
+                        return Some(Node::ScaleExpr {
+                            right: Box::new(node),
+                            size: right_size,
+                            ty: right_type,
+                        });
+                    } else {
+                        return Some(node);
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     fn function_call(&mut self) -> Node {
@@ -931,36 +873,14 @@ impl Parser {
 
         let mut expr = self.expression();
 
-        // Check if the type is compatible
-        let mut widen_left = false;
-        let mut widen_right = false;
-        if !self.type_compatible(
-            expr.ty().unwrap(),
-            fn_sym.clone().ty.unwrap(),
-            true,
-            &mut widen_left,
-            &mut widen_right,
-        ) {
-            panic!(
+        expr = match self.modify_type(expr, fn_sym.clone().ty.unwrap(), None) {
+            Some(node) => node,
+            None => panic!(
                 "Incompatible types at line {} column {}",
                 self.previous(1).line,
                 self.previous(1).column
-            );
-        }
-
-        if widen_left {
-            expr = Node::UnaryExpr {
-                operator: Token {
-                    token_type: TokenType::Widen,
-                    lexeme: None,
-                    line: self.previous(1).line,
-                    column: self.previous(1).column,
-                    value: None,
-                },
-                right: Box::new(expr.clone()),
-                ty: expr.ty().unwrap(),
-            };
-        }
+            ),
+        };
 
         Node::ReturnStmt {
             expr: Box::new(expr),

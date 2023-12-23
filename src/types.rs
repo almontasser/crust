@@ -43,4 +43,18 @@ impl Type {
             _ => panic!("Cannot dereference type {:?}", self),
         }
     }
+
+    pub fn is_int(&self) -> bool {
+        match self {
+            Type::U8 | Type::U16 | Type::U32 | Type::U64 => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_ptr(&self) -> bool {
+        match self {
+            Type::PU8 | Type::PU16 | Type::PU32 | Type::PU64 => true,
+            _ => false,
+        }
+    }
 }

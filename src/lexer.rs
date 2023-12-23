@@ -57,8 +57,6 @@ pub enum TokenType {
     GreaterThanOrEqual,
     LogicalAnd,
 
-    Widen,
-
     EOF,
 }
 
