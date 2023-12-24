@@ -156,13 +156,6 @@ fn main() {
     let source = std::fs::read_to_string(&args[1]).expect("Failed to read file");
     // let source = std::fs::read_to_string("tests/test17").expect("Failed to read file");
 
-    // let source = String::from(
-    //     "fn main() {
-    //         printint(1);
-    //       }
-    //     ",
-    // );
-
     let mut lexer = lexer::Lexer::new(source);
     let tokens = lexer.scan_tokens();
     let mut parser = parser::Parser::new(tokens.clone());
