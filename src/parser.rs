@@ -102,8 +102,8 @@ impl Parser {
     fn single_statement(&mut self) -> Node {
         if self.match_token(vec![TokenType::Let]) {
             return self.var_decl();
-        } else if self.match_token(vec![TokenType::Identifier]) {
-            return self.assignment();
+        // } else if self.match_token(vec![TokenType::Identifier]) {
+        //     return self.assignment();
         } else if self.match_token(vec![TokenType::If]) {
             return self.if_statement();
         } else if self.match_token(vec![TokenType::While]) {
@@ -115,12 +115,7 @@ impl Parser {
         } else if self.match_token(vec![TokenType::Return]) {
             return self.return_statement();
         } else {
-            panic!(
-                "Expected print at line {} column {} got {:?}",
-                self.peek().line,
-                self.peek().column,
-                self.peek().token_type
-            );
+            return self.expression();
         }
     }
 
@@ -201,56 +196,56 @@ impl Parser {
         }
     }
 
-    fn assignment(&mut self) -> Node {
-        let identifier = self.previous(1);
-        // make sure the identifier is declared
-        let symbol = self.find_symbol(identifier.clone());
+    // fn assignment(&mut self) -> Node {
+    //     let identifier = self.previous(1);
+    //     // make sure the identifier is declared
+    //     let symbol = self.find_symbol(identifier.clone());
 
-        if symbol.is_none() {
-            panic!(
-                "Identifier {} not declared at line {} column {}",
-                identifier.lexeme.clone().unwrap(),
-                identifier.line,
-                identifier.column
-            );
-        }
-        let symbol = symbol.unwrap();
+    //     if symbol.is_none() {
+    //         panic!(
+    //             "Identifier {} not declared at line {} column {}",
+    //             identifier.lexeme.clone().unwrap(),
+    //             identifier.line,
+    //             identifier.column
+    //         );
+    //     }
+    //     let symbol = symbol.unwrap();
 
-        if self.match_token(vec![TokenType::LeftParen]) {
-            if symbol.structure != SymbolType::Function {
-                panic!(
-                    "Expected function at line {} column {}",
-                    identifier.line, identifier.column
-                );
-            }
+    //     if self.match_token(vec![TokenType::LeftParen]) {
+    //         if symbol.structure != SymbolType::Function {
+    //             panic!(
+    //                 "Expected function at line {} column {}",
+    //                 identifier.line, identifier.column
+    //             );
+    //         }
 
-            return self.function_call();
-        }
+    //         return self.function_call();
+    //     }
 
-        if symbol.structure != SymbolType::Variable {
-            panic!(
-                "Expected variable at line {} column {}",
-                identifier.line, identifier.column
-            );
-        }
+    //     if symbol.structure != SymbolType::Variable {
+    //         panic!(
+    //             "Expected variable at line {} column {}",
+    //             identifier.line, identifier.column
+    //         );
+    //     }
 
-        self.expect(vec![TokenType::Assign]).unwrap();
-        let mut expr = self.expression();
+    //     self.expect(vec![TokenType::Assign]).unwrap();
+    //     let mut expr = self.expression();
 
-        expr = match self.modify_type(expr, symbol.ty.unwrap(), None) {
-            Some(node) => node,
-            None => panic!(
-                "Incompatible types at line {} column {}",
-                self.previous(1).line,
-                self.previous(1).column
-            ),
-        };
+    //     expr = match self.modify_type(expr, symbol.ty.unwrap(), None) {
+    //         Some(node) => node,
+    //         None => panic!(
+    //             "Incompatible types at line {} column {}",
+    //             self.previous(1).line,
+    //             self.previous(1).column
+    //         ),
+    //     };
 
-        Node::AssignStmt {
-            identifier,
-            expr: Box::new(expr),
-        }
-    }
+    //     Node::AssignStmt {
+    //         identifier,
+    //         expr: Box::new(expr),
+    //     }
+    // }
 
     fn if_statement(&mut self) -> Node {
         self.expect(vec![TokenType::LeftParen]).unwrap();
@@ -462,7 +457,28 @@ impl Parser {
                         panic!("Expected identifier");
                     }
                 }
-                _ => panic!("Expected identifier"),
+                Node::AssignStmt { left, expr } => {
+                    return Node::AssignStmt {
+                        left: Box::new(Node::UnaryExpr {
+                            operator: Token {
+                                token_type: TokenType::Mul,
+                                lexeme: None,
+                                line: self.previous(1).line,
+                                column: self.previous(1).column,
+                                value: None,
+                            },
+                            right: left.clone(),
+                            ty: left.ty().unwrap(),
+                        }),
+                        expr: expr.clone(),
+                    };
+                }
+                _ => panic!(
+                    "Expected identifier at line {} column {}, got {:?}",
+                    self.previous(1).line,
+                    self.previous(1).column,
+                    node
+                ),
             }
 
             node = Node::UnaryExpr {
@@ -520,10 +536,32 @@ impl Parser {
                             );
                         }
                     }
-                    return Node::LiteralExpr {
-                        value: LiteralValue::Identifier(identifier.lexeme.clone().unwrap()),
-                        ty: symbol.ty.unwrap(),
-                    };
+
+                    if self.match_token(vec![TokenType::Assign]) {
+                        let expr = self.expression();
+
+                        // expr = match self.modify_type(expr, symbol.ty.unwrap(), None) {
+                        //     Some(node) => node,
+                        //     None => panic!(
+                        //         "Incompatible types at line {} column {}",
+                        //         self.previous(1).line,
+                        //         self.previous(1).column
+                        //     ),
+                        // };
+
+                        return Node::AssignStmt {
+                            left: Box::new(Node::LiteralExpr {
+                                value: LiteralValue::Identifier(identifier.lexeme.clone().unwrap()),
+                                ty: symbol.ty.unwrap(),
+                            }),
+                            expr: Box::new(expr),
+                        };
+                    } else {
+                        return Node::LiteralExpr {
+                            value: LiteralValue::Identifier(identifier.lexeme.clone().unwrap()),
+                            ty: symbol.ty.unwrap(),
+                        };
+                    }
                 }
                 None => panic!(
                     "Variable {} not declared at line {} column {}",
@@ -574,6 +612,18 @@ impl Parser {
         }
 
         self.peek().token_type == token_type
+    }
+
+    fn check_next(&self, token_type: TokenType) -> bool {
+        if self.is_at_end() {
+            return false;
+        }
+
+        if self.tokens[self.current + 1].token_type == TokenType::EOF {
+            return false;
+        }
+
+        self.tokens[self.current + 1].token_type == token_type
     }
 
     fn peek(&self) -> Token {
@@ -666,8 +716,8 @@ impl Parser {
             None
         // } else if self.match_token(vec![TokenType::Let]) {
         //     Some(self.var_decl())
-        } else if self.match_token(vec![TokenType::Identifier]) {
-            let node = self.assignment();
+        } else if self.check(TokenType::Identifier) {
+            let node = self.expression();
             self.expect(vec![TokenType::SemiColon]).unwrap();
             Some(node)
         } else {

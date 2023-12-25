@@ -44,7 +44,7 @@ pub enum Node {
         ty: Type,
     },
     AssignStmt {
-        identifier: Token,
+        left: Box<Node>,
         expr: Box<Node>,
     },
     CompoundStmt {
@@ -85,7 +85,7 @@ impl Node {
             Node::LiteralExpr { ty, .. } => Some(ty.clone()),
             Node::GlobalVar { ty, .. } => Some(ty.clone()),
             Node::GlobalVarMany { ty, .. } => Some(ty.clone()),
-            Node::AssignStmt { .. } => None,
+            Node::AssignStmt { expr, .. } => expr.ty(),
             Node::CompoundStmt { .. } => None,
             Node::IfStmt { .. } => None,
             Node::WhileStmt { .. } => None,

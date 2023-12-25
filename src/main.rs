@@ -30,7 +30,9 @@ fn _print_node(node: Node, ident: u8) {
             _print_node(*right, ident + 1);
         }
         Node::UnaryExpr {
-            operator, right, ..
+            operator,
+            right,
+            ty,
         } => {
             println!("UnaryExpr");
             for _ in 0..ident + 1 {
@@ -38,6 +40,10 @@ fn _print_node(node: Node, ident: u8) {
             }
             println!("operator: {:?}", operator);
             _print_node(*right, ident + 1);
+            for _ in 0..ident + 1 {
+                print!("  ");
+            }
+            println!("ty: {:?}", ty)
         }
         Node::WidenExpr { right, .. } => {
             println!("WidenExpr");
@@ -72,13 +78,18 @@ fn _print_node(node: Node, ident: u8) {
             }
             println!("identifiers: {:?}", identifiers);
         }
-        Node::AssignStmt { identifier, expr } => {
+        Node::AssignStmt { left, expr } => {
             println!("AssignStmt");
             for _ in 0..ident + 1 {
                 print!("  ");
             }
-            println!("identifier: {:?}", identifier);
-            _print_node(*expr, ident + 1);
+            println!("left:");
+            _print_node(*left, ident + 2);
+            for _ in 0..ident + 1 {
+                print!("  ");
+            }
+            println!("expr:");
+            _print_node(*expr, ident + 2);
         }
         Node::CompoundStmt { statements } => {
             println!("CompoundStmt");
@@ -154,7 +165,7 @@ fn main() {
     }
 
     let source = std::fs::read_to_string(&args[1]).expect("Failed to read file");
-    // let source = std::fs::read_to_string("tests/test17").expect("Failed to read file");
+    // let source = std::fs::read_to_string("tests/test18").expect("Failed to read file");
 
     let mut lexer = lexer::Lexer::new(source);
     let tokens = lexer.scan_tokens();

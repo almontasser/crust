@@ -1,0 +1,11 @@
+let   a: u32;
+let   b: *u32;
+let  c: u8;
+let d: *u8;
+
+fn main(): u8
+{
+  b= &a; *b= 15; printint(a);
+  d= &c; *d= 16; printint(c);
+  return 0;
+}

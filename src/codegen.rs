@@ -23,6 +23,7 @@ pub struct CodeGen {
     assembly: Assembly,
     registers: [bool; 4],
     label_count: usize,
+    assignment_depth: usize,
 }
 
 const REGISTER_NAMES: [&str; 4] = ["%r8", "%r9", "%r10", "%r11"];
@@ -37,6 +38,7 @@ impl CodeGen {
             assembly: Assembly::new(),
             registers: [false; 4],
             label_count: 0,
+            assignment_depth: 0,
         }
     }
 
@@ -143,11 +145,41 @@ impl CodeGen {
                 }
                 0
             }
-            Node::AssignStmt { identifier, expr } => {
-                let register = self.generate_node(*expr.clone());
-                self.store(register, identifier.lexeme.unwrap(), expr.ty().unwrap());
-                self.free_register(register);
-                0
+            Node::AssignStmt { left, expr } => {
+                self.assignment_depth += 1;
+                let r = match *left.clone() {
+                    Node::LiteralExpr { value, .. } => match value {
+                        LiteralValue::Identifier(i) => {
+                            let register = self.generate_node(*expr.clone());
+                            self.store(register, i, expr.ty().unwrap());
+                            self.assignment_depth -= 1;
+                            register
+                        }
+                        _ => panic!("Unexpected token {:?}", left),
+                    },
+                    Node::UnaryExpr {
+                        operator,
+                        right,
+                        ty,
+                    } => match operator.token_type {
+                        TokenType::Mul => {
+                            let right_node = self.generate_node(*right.clone());
+                            let expr_node = self.generate_node(*expr.clone());
+                            self.store_dereference(expr_node, right_node, ty);
+                            self.free_register(expr_node);
+                            self.assignment_depth -= 1;
+                            right_node
+                        }
+                        _ => panic!("Unexpected token {:?}", left),
+                    },
+                    _ => panic!("Unexpected token {:?}", left),
+                };
+
+                if self.assignment_depth == 0 {
+                    self.free_register(r);
+                }
+
+                r
             }
             Node::IfStmt {
                 condition,
@@ -621,5 +653,28 @@ impl CodeGen {
             value, REGISTER_NAMES[register]
         ));
         register
+    }
+
+    fn store_dereference(&mut self, expr_node: usize, right_node: usize, ty: Type) -> usize {
+        match ty {
+            Type::PU8 => self.assembly.text.push_str(&format!(
+                "\tmovb\t{}, ({})\n",
+                BYTE_REGISTER_NAMES[expr_node], REGISTER_NAMES[right_node]
+            )),
+            Type::PU16 => self.assembly.text.push_str(&format!(
+                "\tmovw\t{}, ({})\n",
+                WORD_REGISTER_NAMES[expr_node], REGISTER_NAMES[right_node]
+            )),
+            Type::PU32 => self.assembly.text.push_str(&format!(
+                "\tmovl\t{}, ({})\n",
+                DWORD_REGISTER_NAMES[expr_node], REGISTER_NAMES[right_node]
+            )),
+            Type::PU64 => self.assembly.text.push_str(&format!(
+                "\tmovq\t{}, ({})\n",
+                REGISTER_NAMES[expr_node], REGISTER_NAMES[right_node]
+            )),
+            _ => panic!("Unexpected type {:?}", ty),
+        };
+        expr_node
     }
 }
