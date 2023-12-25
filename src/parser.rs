@@ -500,7 +500,11 @@ impl Parser {
     }
 
     fn primary(&mut self) -> Node {
-        if self.match_token(vec![TokenType::Integer]) {
+        if self.match_token(vec![TokenType::LeftParen]) {
+            let expr = self.expression();
+            self.expect(vec![TokenType::RightParen]).unwrap();
+            return expr;
+        } else if self.match_token(vec![TokenType::Integer]) {
             let val: u64 = match self.previous(1).value {
                 Some(Literal::Integer(val)) => val,
                 _ => panic!("Expected integer"),
