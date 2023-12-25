@@ -196,57 +196,6 @@ impl Parser {
         }
     }
 
-    // fn assignment(&mut self) -> Node {
-    //     let identifier = self.previous(1);
-    //     // make sure the identifier is declared
-    //     let symbol = self.find_symbol(identifier.clone());
-
-    //     if symbol.is_none() {
-    //         panic!(
-    //             "Identifier {} not declared at line {} column {}",
-    //             identifier.lexeme.clone().unwrap(),
-    //             identifier.line,
-    //             identifier.column
-    //         );
-    //     }
-    //     let symbol = symbol.unwrap();
-
-    //     if self.match_token(vec![TokenType::LeftParen]) {
-    //         if symbol.structure != SymbolType::Function {
-    //             panic!(
-    //                 "Expected function at line {} column {}",
-    //                 identifier.line, identifier.column
-    //             );
-    //         }
-
-    //         return self.function_call();
-    //     }
-
-    //     if symbol.structure != SymbolType::Variable {
-    //         panic!(
-    //             "Expected variable at line {} column {}",
-    //             identifier.line, identifier.column
-    //         );
-    //     }
-
-    //     self.expect(vec![TokenType::Assign]).unwrap();
-    //     let mut expr = self.expression();
-
-    //     expr = match self.modify_type(expr, symbol.ty.unwrap(), None) {
-    //         Some(node) => node,
-    //         None => panic!(
-    //             "Incompatible types at line {} column {}",
-    //             self.previous(1).line,
-    //             self.previous(1).column
-    //         ),
-    //     };
-
-    //     Node::AssignStmt {
-    //         identifier,
-    //         expr: Box::new(expr),
-    //     }
-    // }
-
     fn if_statement(&mut self) -> Node {
         self.expect(vec![TokenType::LeftParen]).unwrap();
         let expr = self.expression();
