@@ -601,18 +601,6 @@ impl Parser {
         self.peek().token_type == token_type
     }
 
-    fn check_next(&self, token_type: TokenType) -> bool {
-        if self.is_at_end() {
-            return false;
-        }
-
-        if self.tokens[self.current + 1].token_type == TokenType::EOF {
-            return false;
-        }
-
-        self.tokens[self.current + 1].token_type == token_type
-    }
-
     fn peek(&self) -> Token {
         self.tokens[self.current].clone()
     }
