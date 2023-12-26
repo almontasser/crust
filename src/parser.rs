@@ -10,6 +10,7 @@ use crate::{
 pub enum SymbolType {
     Function,
     Variable,
+    Array,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -18,6 +19,7 @@ pub struct Symbol {
     pub structure: SymbolType,
     pub ty: Option<Type>,
     pub end_label: Option<String>,
+    pub size: Option<usize>,
 }
 
 pub struct Parser {
@@ -48,6 +50,7 @@ impl Parser {
                     structure: SymbolType::Function,
                     ty: Some(Type::U8),
                     end_label: None,
+                    size: None,
                 },
             ],
             current_fn: None,
@@ -140,6 +143,18 @@ impl Parser {
             ])
             .unwrap();
 
+        let (is_array, size) = if self.match_token(vec![TokenType::LeftBracket]) {
+            let size_token = self.expect(vec![TokenType::Integer]).unwrap();
+            let size = match size_token.value {
+                Some(Literal::Integer(val)) => val,
+                _ => panic!("Expected integer"),
+            };
+            self.expect(vec![TokenType::RightBracket]).unwrap();
+            (true, size)
+        } else {
+            (false, 0)
+        };
+
         let mut ty = match ty_token.token_type {
             TokenType::U8 => Type::U8,
             TokenType::U16 => Type::U16,
@@ -150,6 +165,13 @@ impl Parser {
 
         for _ in 0..pointers_counter {
             ty = ty.pointer_to();
+        }
+
+        if is_array {
+            ty = Type::Array {
+                ty: Box::new(ty),
+                count: size,
+            };
         }
 
         ty
@@ -168,10 +190,16 @@ impl Parser {
         let ty = self.parse_type();
 
         if identifiers.clone().len() == 1 {
+            let structure = if ty.is_array() {
+                SymbolType::Array
+            } else {
+                SymbolType::Variable
+            };
             self.add_symbol(
                 identifiers[0].clone(),
-                SymbolType::Variable,
+                structure,
                 Some(ty.clone()),
+                None,
                 None,
             );
 
@@ -185,6 +213,7 @@ impl Parser {
                     identifier.clone(),
                     SymbolType::Variable,
                     Some(ty.clone()),
+                    None,
                     None,
                 );
             }
@@ -482,13 +511,24 @@ impl Parser {
                         }
                         return self.function_call();
                     } else {
-                        if symbol.structure != SymbolType::Variable {
+                        if symbol.structure != SymbolType::Variable
+                            && symbol.structure != SymbolType::Array
+                        {
                             panic!(
-                                "Expected variable at line {} column {}",
-                                identifier.line, identifier.column
+                                "Expected variable at line {} column {} got {:?}",
+                                identifier.line, identifier.column, symbol.structure
                             );
                         }
                     }
+
+                    let left = if self.match_token(vec![TokenType::LeftBracket]) {
+                        self.array_access()
+                    } else {
+                        Node::LiteralExpr {
+                            value: LiteralValue::Identifier(identifier.lexeme.clone().unwrap()),
+                            ty: symbol.ty.unwrap(),
+                        }
+                    };
 
                     if self.match_token(vec![TokenType::Assign]) {
                         let expr = self.expression();
@@ -503,17 +543,11 @@ impl Parser {
                         // };
 
                         return Node::AssignStmt {
-                            left: Box::new(Node::LiteralExpr {
-                                value: LiteralValue::Identifier(identifier.lexeme.clone().unwrap()),
-                                ty: symbol.ty.unwrap(),
-                            }),
+                            left: Box::new(left),
                             expr: Box::new(expr),
                         };
                     } else {
-                        return Node::LiteralExpr {
-                            value: LiteralValue::Identifier(identifier.lexeme.clone().unwrap()),
-                            ty: symbol.ty.unwrap(),
-                        };
+                        return left;
                     }
                 }
                 None => panic!(
@@ -601,6 +635,7 @@ impl Parser {
         structure: SymbolType,
         ty: Option<Type>,
         end_label: Option<String>,
+        size: Option<usize>,
     ) -> Symbol {
         let symbol = self.find_symbol(identifier.clone());
         if symbol.is_some() {
@@ -617,6 +652,7 @@ impl Parser {
             structure,
             ty: ty,
             end_label,
+            size,
         };
 
         self.symbols.push(symbol.clone());
@@ -733,6 +769,7 @@ impl Parser {
             SymbolType::Function,
             ty.clone(),
             end_label,
+            None,
         );
         self.current_fn = Some(symbol.clone());
         let body = self.compound_statement();
@@ -888,6 +925,79 @@ impl Parser {
         Node::ReturnStmt {
             expr: Box::new(expr),
             fn_name: fn_sym,
+        }
+    }
+
+    fn array_access(&mut self) -> Node {
+        let identifier = self.previous(2);
+        let symbol = self.find_symbol(identifier.clone());
+
+        if symbol.is_none() {
+            panic!(
+                "Variable {} not declared at line {} column {}",
+                identifier.lexeme.clone().unwrap(),
+                identifier.line,
+                identifier.column
+            );
+        }
+
+        let symbol = symbol.unwrap();
+        if symbol.structure != SymbolType::Array {
+            panic!(
+                "Expected array at line {} column {} got {:?}",
+                identifier.line, identifier.column, symbol.structure
+            );
+        }
+
+        let mut left = Node::LiteralExpr {
+            value: LiteralValue::Identifier(identifier.lexeme.clone().unwrap()),
+            ty: symbol.ty.unwrap(),
+        };
+
+        let mut index = self.expression();
+
+        self.expect(vec![TokenType::RightBracket]).unwrap();
+
+        if !index.ty().unwrap().is_int() {
+            panic!(
+                "Expected integer at line {} column {}",
+                self.previous(1).line,
+                self.previous(1).column
+            );
+        }
+
+        index = match self.modify_type(index, Type::U32, Some(TokenType::Add)) {
+            Some(node) => node,
+            None => panic!(
+                "Incompatible types at line {} column {}",
+                self.previous(1).line,
+                self.previous(1).column
+            ),
+        };
+
+        left = Node::BinaryExpr {
+            left: Box::new(left.clone()),
+            operator: Token {
+                token_type: TokenType::Add,
+                lexeme: None,
+                line: self.previous(1).line,
+                column: self.previous(1).column,
+                value: None,
+            },
+            right: Box::new(index),
+            ty: left.ty().unwrap(),
+        };
+
+        Node::UnaryExpr {
+            operator: Token {
+                token_type: TokenType::Mul,
+                lexeme: None,
+                line: self.previous(1).line,
+                column: self.previous(1).column,
+                value: None,
+            },
+            right: Box::new(left.clone()),
+            ty: left.ty().unwrap(),
         }
     }
 }

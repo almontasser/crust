@@ -264,6 +264,10 @@ impl CodeGen {
             self.assembly
                 .text
                 .push_str(&format!("\tmovq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
+        } else if let Type::Array { ty, count } = ty {
+            self.assembly
+                .text
+                .push_str(&format!("\tleaq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
         } else {
             panic!("Unexpected type {:?}", ty);
         }
@@ -272,6 +276,10 @@ impl CodeGen {
     }
 
     fn store(&mut self, register: usize, identifier: String, ty: Type) {
+        let ty = match ty {
+            Type::Array { ty, .. } => ty.pointer_to(),
+            _ => ty,
+        };
         if ty == Type::U8 {
             self.assembly.text.push_str(&format!(
                 "\tmovb\t{}, {}\n",
@@ -307,20 +315,29 @@ impl CodeGen {
     }
 
     fn define_global(&mut self, identifier: String, ty: Type) {
-        let size = ty.size();
+        let type_size = ty.size();
+
         self.assembly
             .data
             .push_str(&format!("\t.data\n\t.global\t{}\n", identifier));
-        let size_str = match size {
-            1 => ".byte",
-            2 => ".short",
-            4 => ".long",
-            8 => ".quad",
-            _ => panic!("Unexpected size {}", size),
+        self.assembly.data.push_str(&format!("{}:\n", identifier));
+
+        let count = match ty {
+            Type::Array { count, .. } => count,
+            _ => 1,
         };
-        self.assembly
-            .data
-            .push_str(&format!("{}:\t{}\t0\n", identifier, size_str));
+
+        let size_str = match type_size {
+            1 => "\t.byte\t0\n",
+            2 => "\t.short\t0\n",
+            4 => "\t.long\t0\n",
+            8 => "\t.quad\t0\n",
+            _ => panic!("Unexpected size {}", type_size),
+        };
+
+        for _ in 0..count {
+            self.assembly.data.push_str(size_str);
+        }
     }
 
     fn add(&mut self, left: usize, right: usize) -> usize {
@@ -605,6 +622,7 @@ impl CodeGen {
                     .text
                     .push_str(&format!("\tmovq\t{}, %rax\n", REGISTER_NAMES[register]));
             }
+            _ => panic!("Unexpected type {:?}", fn_name.ty.clone().unwrap()),
         }
         self.assembly
             .text
@@ -624,6 +642,10 @@ impl CodeGen {
     }
 
     fn dereference(&mut self, register: usize, ty: Type) -> usize {
+        let ty = match ty {
+            Type::Array { ty, .. } => ty.pointer_to(),
+            _ => ty,
+        };
         match ty {
             Type::PU8 => self.assembly.text.push_str(&format!(
                 "\tmovzbq\t({}), {}\n",
@@ -656,6 +678,11 @@ impl CodeGen {
     }
 
     fn store_dereference(&mut self, expr_node: usize, right_node: usize, ty: Type) -> usize {
+        let ty = match ty {
+            Type::Array { ty, .. } => ty.pointer_to(),
+            _ => ty,
+        };
+
         match ty {
             Type::PU8 => self.assembly.text.push_str(&format!(
                 "\tmovb\t{}, ({})\n",

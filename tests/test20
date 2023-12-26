@@ -1,0 +1,8 @@
+let a: u8;
+let b: u8[25];
+
+fn main(): u32 {
+  b[3]= 12; a= b[3];
+  printint(a);
+  return 0;
+}

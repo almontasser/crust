@@ -8,6 +8,7 @@ pub enum Type {
     PU16,
     PU32,
     PU64,
+    Array { ty: Box<Type>, count: u64 },
 }
 
 impl Type {
@@ -21,6 +22,7 @@ impl Type {
             Type::PU16 => 8,
             Type::PU32 => 8,
             Type::PU64 => 8,
+            Type::Array { ty, .. } => ty.size(),
         }
     }
 
@@ -40,6 +42,7 @@ impl Type {
             Type::PU16 => Type::U16,
             Type::PU32 => Type::U32,
             Type::PU64 => Type::U64,
+            Type::Array { ty, .. } => *ty.clone(),
             _ => panic!("Cannot dereference type {:?}", self),
         }
     }
@@ -54,6 +57,13 @@ impl Type {
     pub fn is_ptr(&self) -> bool {
         match self {
             Type::PU8 | Type::PU16 | Type::PU32 | Type::PU64 => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_array(&self) -> bool {
+        match self {
+            Type::Array { .. } => true,
             _ => false,
         }
     }
