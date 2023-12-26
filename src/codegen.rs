@@ -264,7 +264,7 @@ impl CodeGen {
             self.assembly
                 .text
                 .push_str(&format!("\tmovq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
-        } else if let Type::Array { ty, count } = ty {
+        } else if let Type::Array { ty: _, count: _ } = ty {
             self.assembly
                 .text
                 .push_str(&format!("\tleaq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
