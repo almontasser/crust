@@ -64,19 +64,27 @@ fn _print_node(node: Node, ident: u8) {
             }
             println!("value: {:?}", value);
         }
-        Node::GlobalVar { identifier, .. } => {
+        Node::GlobalVar { identifier, ty } => {
             println!("GlobalVar");
             for _ in 0..ident + 1 {
                 print!("  ");
             }
-            println!("identifier: {:?}", identifier);
+            match identifier.value {
+                Some(lexer::Literal::Identifier(ref s)) => println!("{}: {:?}", s, ty),
+                _ => panic!("Expected identifier"),
+            }
         }
-        Node::GlobalVarMany { identifiers, .. } => {
+        Node::GlobalVarMany { identifiers, ty } => {
             println!("GlobalVarMany");
             for _ in 0..ident + 1 {
                 print!("  ");
             }
-            println!("identifiers: {:?}", identifiers);
+            for identifier in identifiers {
+                match identifier.value {
+                    Some(lexer::Literal::Identifier(ref s)) => println!("{}: {:?}", s, ty),
+                    _ => panic!("Expected identifier"),
+                }
+            }
         }
         Node::AssignStmt { left, expr } => {
             println!("AssignStmt");
@@ -127,13 +135,12 @@ fn _print_node(node: Node, ident: u8) {
             for _ in 0..ident + 1 {
                 print!("  ");
             }
-            println!("identifier: {:?}", identifier);
-            if let Some(return_type) = return_type {
-                for _ in 0..ident + 1 {
-                    print!("  ");
-                }
-                println!("return_type: {:?}", return_type);
-            }
+            println!(
+                "{}(): {:?}",
+                identifier.lexeme.unwrap(),
+                return_type.unwrap()
+            );
+
             _print_node(*body, ident + 1);
         }
         Node::FnCall {
@@ -157,24 +164,33 @@ fn _print_node(node: Node, ident: u8) {
     }
 }
 
-fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() != 2 {
-        println!("Usage: zcompiler <source>");
-        std::process::exit(1);
-    }
+const DEBUG: bool = false;
+const DEBUG_TEST_FILE: &str = "tests/test21";
 
-    let source = std::fs::read_to_string(&args[1]).expect("Failed to read file");
-    // let source = std::fs::read_to_string("tests/test20").expect("Failed to read file");
+fn main() {
+    let source: String;
+    if !DEBUG {
+        let args: Vec<String> = std::env::args().collect();
+        if args.len() != 2 {
+            println!("Usage: zcompiler <source>");
+            std::process::exit(1);
+        }
+
+        source = std::fs::read_to_string(&args[1]).expect("Failed to read file");
+    } else {
+        source = std::fs::read_to_string(DEBUG_TEST_FILE).expect("Failed to read file");
+    }
 
     let mut lexer = lexer::Lexer::new(source);
     let tokens = lexer.scan_tokens();
     let mut parser = parser::Parser::new(tokens.clone());
     let nodes = parser.parse();
 
-    // for node in nodes.clone() {
-    //     _print_node(node, 0);
-    // }
+    if DEBUG {
+        for node in nodes.clone() {
+            _print_node(node, 0);
+        }
+    }
 
     let mut codegen = CodeGen::new(nodes.clone());
     let assembly = codegen.generate();
