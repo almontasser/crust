@@ -103,8 +103,7 @@ impl CodeGen {
                 match operator.token_type {
                     TokenType::Sub => {
                         let right_node = self.generate_node(*right.clone());
-                        self.load(0, ty);
-                        self.subtract(0, right_node)
+                        self.negate(right_node)
                     }
                     TokenType::Ampersand => {
                         // get identifier
@@ -121,6 +120,14 @@ impl CodeGen {
                     TokenType::Mul => {
                         let right_node = self.generate_node(*right.clone());
                         self.dereference(right_node, right.ty().unwrap())
+                    }
+                    TokenType::Invert => {
+                        let right_node = self.generate_node(*right.clone());
+                        self.invert(right_node)
+                    }
+                    TokenType::LogicalNot => {
+                        let right_node = self.generate_node(*right.clone());
+                        self.logical_not(right_node)
                     }
                     _ => panic!("Unexpected token {:?}", operator),
                 }
@@ -213,6 +220,11 @@ impl CodeGen {
                 }
             }
             Node::ReturnStmt { expr, fn_name } => self.return_stmt(expr, fn_name),
+            Node::PostIncStmt { left } => self.post_inc_stmt(left),
+            Node::PostDecStmt { left } => self.post_dec_stmt(left),
+            Node::PreIncStmt { right } => self.pre_inc_stmt(right),
+            Node::PreDecStmt { right } => self.pre_dec_stmt(right),
+            Node::ToBool { expr } => self.to_bool(expr),
         }
     }
 
@@ -223,83 +235,115 @@ impl CodeGen {
 
         self.assembly.text.push_str("\t.text\n");
 
-        self.assembly.text.push_str(
-            "
-.global printint
-printint:
-    # Prologue
-    push %rbp
-    mov %rsp, %rbp
+        //         self.assembly.text.push_str(
+        //             "
+        // .global printint
+        // printint:
+        //     # Prologue
+        //     push %rbp
+        //     mov %rsp, %rbp
 
-    # Check if input number is 0
-    cmp $0, %rdi
-    je print_zero
+        //     # Check if input number is 0
+        //     cmp $0, %rdi
+        //     je print_zero
 
-    # Prepare for conversion
-    mov %rdi, %rax        # Copy number to rax
-    mov $buffer+20, %rsi  # Load address of the second last digit space
-    movb $10, (%rsi)     # Store newline character after the number
+        //     # Prepare for conversion
+        //     mov %rdi, %rax        # Copy number to rax
+        //     mov $buffer+20, %rsi  # Load address of the second last digit space
+        //     movb $10, (%rsi)     # Store newline character after the number
 
-    # Convert number to string
-convert_loop:
-    xor %rdx, %rdx        # Clear rdx for div
-    mov $10, %rbx         # Set divisor to 10
-    div %rbx              # Divide rax by 10, result in rax, remainder in rdx
-    add $48, %rdx         # Convert remainder to ASCII
-    dec %rsi
-    mov %dl, (%rsi)       # Store ASCII character
-    test %rax, %rax       # Check if number is zero
-    jnz convert_loop      # If not, continue loop
+        //     # Convert number to string
+        // convert_loop:
+        //     xor %rdx, %rdx        # Clear rdx for div
+        //     mov $10, %rbx         # Set divisor to 10
+        //     div %rbx              # Divide rax by 10, result in rax, remainder in rdx
+        //     add $48, %rdx         # Convert remainder to ASCII
+        //     dec %rsi
+        //     mov %dl, (%rsi)       # Store ASCII character
+        //     test %rax, %rax       # Check if number is zero
+        //     jnz convert_loop      # If not, continue loop
 
-    # Set up for write syscall
-    movq $buffer+21, %rdi
-    subq %rsi, %rdi
-    movq %rdi, %rdx
-    mov $1, %rax          # syscall number for sys_write
-    mov $1, %rdi          # file descriptor 1 (stdout)
-    syscall
+        //     # Set up for write syscall
+        //     movq $buffer+21, %rdi
+        //     subq %rsi, %rdi
+        //     movq %rdi, %rdx
+        //     mov $1, %rax          # syscall number for sys_write
+        //     mov $1, %rdi          # file descriptor 1 (stdout)
+        //     syscall
 
-    # Epilogue
-    mov $0, %rax
-    leave
-    ret
+        //     # Epilogue
+        //     mov $0, %rax
+        //     leave
+        //     ret
 
-print_zero:
-    # Handle printing 0
-    mov $1, %rax          # syscall number for sys_write
-    mov $1, %rdi          # file descriptor 1 (stdout)
-    lea buffer+19, %rsi   # point to '0'
-    movb $'0', (%rsi)     # place '0' in buffer
-    movb $10, 1(%rsi)     # place newline after '0'
-    mov $2, %rdx          # length is 2 (including newline)
-    syscall
+        // print_zero:
+        //     # Handle printing 0
+        //     mov $1, %rax          # syscall number for sys_write
+        //     mov $1, %rdi          # file descriptor 1 (stdout)
+        //     lea buffer+19, %rsi   # point to '0'
+        //     movb $'0', (%rsi)     # place '0' in buffer
+        //     movb $10, 1(%rsi)     # place newline after '0'
+        //     mov $2, %rdx          # length is 2 (including newline)
+        //     syscall
 
-    mov $0, %rax
-    leave
-    ret
+        //     mov $0, %rax
+        //     leave
+        //     ret
 
-.global printchar
-printchar:
-    # Prologue
-    push %rbp
-    mov %rsp, %rbp
+        // .global printchar
+        // printchar:
+        //     # Prologue
+        //     push %rbp
+        //     mov %rsp, %rbp
 
-    # Move character to buffer
-    lea buffer, %rsi
-    mov %rdi, (%rsi)
+        //     # Move character to buffer
+        //     lea buffer, %rsi
+        //     mov %rdi, (%rsi)
 
-    # Set up for write syscall
-    mov $1, %rax          # syscall number for sys_write
-    mov $1, %rdi          # file descriptor 1 (stdout)
-    mov $1, %rdx          # length is 1
-    syscall
+        //     # Set up for write syscall
+        //     mov $1, %rax          # syscall number for sys_write
+        //     mov $1, %rdi          # file descriptor 1 (stdout)
+        //     mov $1, %rdx          # length is 1
+        //     syscall
 
-    # Epilogue
-    mov $0, %rax
-    leave
-    ret
-",
-        );
+        //     # Epilogue
+        //     mov $0, %rax
+        //     leave
+        //     ret
+        // ",
+        //         );
+
+        self.assembly.text.push_str(".LC0:\n");
+        self.assembly.text.push_str("\t.string\t\"%d\\n\"\n");
+        self.assembly.text.push_str("printint:\n");
+        self.assembly.text.push_str("\tpushq\t%rbp\n");
+        self.assembly.text.push_str("\tmovq\t%rsp, %rbp\n");
+        self.assembly.text.push_str("\tsubq\t$16, %rsp\n");
+        self.assembly.text.push_str("\tmovl\t%edi, -4(%rbp)\n");
+        self.assembly.text.push_str("\tmovl\t-4(%rbp), %eax\n");
+        self.assembly.text.push_str("\tmovl\t%eax, %esi\n");
+        self.assembly.text.push_str("\tleaq\t.LC0(%rip), %rdi\n");
+        self.assembly.text.push_str("\tmovl\t$0, %eax\n");
+        self.assembly.text.push_str("\tcall\tprintf@PLT\n");
+        self.assembly.text.push_str("\tnop\n");
+        self.assembly.text.push_str("\tleave\n");
+        self.assembly.text.push_str("\tret\n\n");
+
+        self.assembly.text.push_str(".LC1:\n");
+        self.assembly.text.push_str("\t.string\t\"%c\"\n");
+        self.assembly.text.push_str("printchar:\n");
+        self.assembly.text.push_str("\tpushq\t%rbp\n");
+        self.assembly.text.push_str("\tmovq\t%rsp, %rbp\n");
+        self.assembly.text.push_str("\tsubq\t$16, %rsp\n");
+        self.assembly.text.push_str("\tmovl\t%edi, -4(%rbp)\n");
+        self.assembly.text.push_str("\tmovl\t-4(%rbp), %eax\n");
+        self.assembly.text.push_str("\tmovl\t%eax, %esi\n");
+        self.assembly.text.push_str("\tleaq\t.LC1(%rip), %rdi\n");
+        self.assembly.text.push_str("\tmovl\t$0, %eax\n");
+        self.assembly.text.push_str("\tcall\tprintf@PLT\n");
+        self.assembly.text.push_str("\tnop\n");
+        self.assembly.text.push_str("\tleave\n");
+        self.assembly.text.push_str("\tret\n\n");
     }
 
     fn load(&mut self, value: u64, _ty: Type) -> usize {
@@ -331,7 +375,29 @@ printchar:
             || ty == Type::PU16
             || ty == Type::PU32
             || ty == Type::PU64
+            || ty == Type::PI8
+            || ty == Type::PI16
+            || ty == Type::PI32
+            || ty == Type::PI64
         {
+            self.assembly
+                .text
+                .push_str(&format!("\tmovq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
+        } else if ty == Type::I8 {
+            self.assembly.text.push_str(&format!(
+                "\tmovsbq\t{}, {}\n",
+                identifier, REGISTER_NAMES[r]
+            ));
+        } else if ty == Type::I16 {
+            self.assembly
+                .text
+                .push_str(&format!("\tmovsx\t{}, {}\n", identifier, REGISTER_NAMES[r]));
+        } else if ty == Type::I32 {
+            self.assembly.text.push_str(&format!(
+                "\tmov\t{}, {}\n",
+                identifier, DWORD_REGISTER_NAMES[r]
+            ));
+        } else if ty == Type::I64 {
             self.assembly
                 .text
                 .push_str(&format!("\tmovq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
@@ -351,7 +417,7 @@ printchar:
             Type::Array { ty, .. } => ty.pointer_to(),
             _ => ty,
         };
-        if ty == Type::U8 {
+        if ty == Type::U8 || ty == Type::Char {
             self.assembly.text.push_str(&format!(
                 "\tmovb\t{}, {}\n",
                 BYTE_REGISTER_NAMES[register], identifier
@@ -376,6 +442,32 @@ printchar:
                 "\tmovq\t{}, {}\n",
                 REGISTER_NAMES[register], identifier
             ));
+        } else if ty == Type::I8 {
+            self.assembly.text.push_str(&format!(
+                "\tmovb\t{}, {}\n",
+                BYTE_REGISTER_NAMES[register], identifier
+            ));
+        } else if ty == Type::I16 {
+            self.assembly.text.push_str(&format!(
+                "\tmovw\t{}, {}\n",
+                WORD_REGISTER_NAMES[register], identifier
+            ));
+        } else if ty == Type::I32 {
+            self.assembly.text.push_str(&format!(
+                "\tmovl\t{}, {}\n",
+                DWORD_REGISTER_NAMES[register], identifier
+            ));
+        } else if ty == Type::I64
+            || ty == Type::PI8
+            || ty == Type::PI16
+            || ty == Type::PI32
+            || ty == Type::PI64
+        {
+            self.assembly.text.push_str(&format!(
+                "\tmovq\t{}, {}\n",
+                REGISTER_NAMES[register], identifier
+            ));
+            panic!("Unexpected type {:?}", ty);
         } else {
             panic!("Unexpected type {:?}", ty);
         }
@@ -558,6 +650,15 @@ printchar:
 
                 (left_reg, right_reg, operator.token_type)
             }
+            Node::ToBool { expr } => {
+                let left_reg = self.generate_node(*expr);
+                let right_reg = self.allocate_register();
+                self.assembly.text.push_str(&format!(
+                    "\ttest\t{}, {}\n",
+                    REGISTER_NAMES[right_reg], REGISTER_NAMES[right_reg]
+                ));
+                (left_reg, right_reg, TokenType::NotEqual)
+            }
             _ => panic!("Unexpected token {:?}", condition),
         };
 
@@ -602,6 +703,15 @@ printchar:
                 let right_reg = self.generate_node(*right);
 
                 (left_reg, right_reg, operator.token_type)
+            }
+            Node::ToBool { expr } => {
+                let left_reg = self.generate_node(*expr);
+                let right_reg = self.allocate_register();
+                self.assembly
+                    .text
+                    .push_str(&format!("\tmovq\t$0, {}\n", REGISTER_NAMES[right_reg]));
+
+                (left_reg, right_reg, TokenType::NotEqual)
             }
             _ => panic!("Unexpected token {:?}", condition),
         };
@@ -787,5 +897,151 @@ printchar:
             .text
             .push_str(&format!("\tleaq\t{}, {}\n", label, REGISTER_NAMES[r]));
         r
+    }
+
+    fn post_inc_stmt(&mut self, left: Box<Node>) -> usize {
+        // should increment the value and return the old value
+        let left = match *left.clone() {
+            Node::LiteralExpr { value, .. } => match value {
+                LiteralValue::Identifier(i) => i,
+                _ => panic!("Unexpected token {:?}", left),
+            },
+            _ => panic!("Unexpected token {:?}", left),
+        };
+
+        let r = self.allocate_register();
+        let r2 = self.allocate_register();
+        self.assembly
+            .text
+            .push_str(&format!("\tmovq\t{}, {}\n", left, REGISTER_NAMES[r]));
+        self.assembly.text.push_str(&format!(
+            "\tmovq\t{}, {}\n",
+            REGISTER_NAMES[r], REGISTER_NAMES[r2]
+        ));
+        self.assembly
+            .text
+            .push_str(&format!("\taddq\t$1, {}\n", REGISTER_NAMES[r]));
+        self.assembly
+            .text
+            .push_str(&format!("\tmovq\t{}, {}\n", REGISTER_NAMES[r], left));
+        self.free_register(r);
+        r2
+    }
+
+    fn post_dec_stmt(&mut self, left: Box<Node>) -> usize {
+        // should decrement the value and return the old value
+        let left = match *left.clone() {
+            Node::LiteralExpr { value, .. } => match value {
+                LiteralValue::Identifier(i) => i,
+                _ => panic!("Unexpected token {:?}", left),
+            },
+            _ => panic!("Unexpected token {:?}", left),
+        };
+
+        let r = self.allocate_register();
+        let r2 = self.allocate_register();
+        self.assembly
+            .text
+            .push_str(&format!("\tmovq\t{}, {}\n", left, REGISTER_NAMES[r]));
+        self.assembly.text.push_str(&format!(
+            "\tmovq\t{}, {}\n",
+            REGISTER_NAMES[r], REGISTER_NAMES[r2]
+        ));
+        self.assembly
+            .text
+            .push_str(&format!("\tsubq\t$1, {}\n", REGISTER_NAMES[r]));
+        self.assembly
+            .text
+            .push_str(&format!("\tmovq\t{}, {}\n", REGISTER_NAMES[r], left));
+        self.free_register(r);
+        r2
+    }
+
+    fn pre_inc_stmt(&mut self, right: Box<Node>) -> usize {
+        let right = match *right.clone() {
+            Node::LiteralExpr { value, .. } => match value {
+                LiteralValue::Identifier(i) => i,
+                _ => panic!("Unexpected token {:?}", right),
+            },
+            _ => panic!("Unexpected token {:?}", right),
+        };
+
+        let r = self.allocate_register();
+        self.assembly
+            .text
+            .push_str(&format!("\tmovq\t{}, {}\n", right, REGISTER_NAMES[r]));
+        self.assembly
+            .text
+            .push_str(&format!("\taddq\t$1, {}\n", REGISTER_NAMES[r]));
+        self.assembly
+            .text
+            .push_str(&format!("\tmovq\t{}, {}\n", REGISTER_NAMES[r], right));
+        r
+    }
+
+    fn pre_dec_stmt(&mut self, right: Box<Node>) -> usize {
+        let right = match *right.clone() {
+            Node::LiteralExpr { value, .. } => match value {
+                LiteralValue::Identifier(i) => i,
+                _ => panic!("Unexpected token {:?}", right),
+            },
+            _ => panic!("Unexpected token {:?}", right),
+        };
+
+        let r = self.allocate_register();
+        self.assembly
+            .text
+            .push_str(&format!("\tmovq\t{}, {}\n", right, REGISTER_NAMES[r]));
+        self.assembly
+            .text
+            .push_str(&format!("\tsubq\t$1, {}\n", REGISTER_NAMES[r]));
+        self.assembly
+            .text
+            .push_str(&format!("\tmovq\t{}, {}\n", REGISTER_NAMES[r], right));
+        r
+    }
+
+    fn to_bool(&mut self, expr: Box<Node>) -> usize {
+        let r = self.generate_node(*expr);
+        self.assembly
+            .text
+            .push_str(&format!("\tcmpq\t$0, {}\n", REGISTER_NAMES[r]));
+        self.assembly
+            .text
+            .push_str(&format!("\tsetne\t{}\n", BYTE_REGISTER_NAMES[r]));
+        self.assembly.text.push_str(&format!(
+            "\tmovzbq\t{}, {}\n",
+            BYTE_REGISTER_NAMES[r], REGISTER_NAMES[r]
+        ));
+        r
+    }
+
+    fn negate(&mut self, right_node: usize) -> usize {
+        self.assembly
+            .text
+            .push_str(&format!("\tnegq\t{}\n", REGISTER_NAMES[right_node]));
+        right_node
+    }
+
+    fn invert(&mut self, right_node: usize) -> usize {
+        self.assembly
+            .text
+            .push_str(&format!("\tnotq\t{}\n", REGISTER_NAMES[right_node]));
+        right_node
+    }
+
+    fn logical_not(&mut self, right_node: usize) -> usize {
+        self.assembly.text.push_str(&format!(
+            "\ttestq\t{}, {}\n",
+            REGISTER_NAMES[right_node], REGISTER_NAMES[right_node]
+        ));
+        self.assembly
+            .text
+            .push_str(&format!("\tsete\t{}\n", BYTE_REGISTER_NAMES[right_node]));
+        self.assembly.text.push_str(&format!(
+            "\tmovzbq\t{}, {}\n",
+            BYTE_REGISTER_NAMES[right_node], REGISTER_NAMES[right_node]
+        ));
+        right_node
     }
 }

@@ -161,11 +161,31 @@ fn _print_node(node: Node, ident: u8) {
             println!("fn_name: {:?}", fn_name);
             _print_node(*expr, ident + 1);
         }
+        Node::PostIncStmt { left } => {
+            println!("PostIncStmt");
+            _print_node(*left, ident + 1);
+        }
+        Node::PostDecStmt { left } => {
+            println!("PostDecStmt");
+            _print_node(*left, ident + 1);
+        }
+        Node::PreIncStmt { right } => {
+            println!("PreIncStmt");
+            _print_node(*right, ident + 1);
+        }
+        Node::PreDecStmt { right } => {
+            println!("PreDecStmt");
+            _print_node(*right, ident + 1);
+        }
+        Node::ToBool { expr } => {
+            println!("ToBool");
+            _print_node(*expr, ident + 1);
+        }
     }
 }
 
 const DEBUG: bool = false;
-const DEBUG_TEST_FILE: &str = "tests/test21";
+const DEBUG_TEST_FILE: &str = "tests/test23";
 
 fn main() {
     let source: String;

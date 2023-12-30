@@ -74,6 +74,21 @@ pub enum Node {
         expr: Box<Node>,
         fn_name: Symbol,
     },
+    PostIncStmt {
+        left: Box<Node>,
+    },
+    PostDecStmt {
+        left: Box<Node>,
+    },
+    PreIncStmt {
+        right: Box<Node>,
+    },
+    PreDecStmt {
+        right: Box<Node>,
+    },
+    ToBool {
+        expr: Box<Node>,
+    },
 }
 
 impl Node {
@@ -93,6 +108,11 @@ impl Node {
             Node::FnDecl { .. } => None,
             Node::FnCall { ty, .. } => Some(ty.clone()),
             Node::ReturnStmt { .. } => None,
+            Node::PostIncStmt { left } => left.ty(),
+            Node::PostDecStmt { left } => left.ty(),
+            Node::PreIncStmt { right } => right.ty(),
+            Node::PreDecStmt { right } => right.ty(),
+            Node::ToBool { .. } => Some(Type::U8),
         }
     }
 }

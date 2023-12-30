@@ -10,7 +10,6 @@ use crate::{
 pub enum SymbolType {
     Function,
     Variable,
-    Array,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -153,6 +152,10 @@ impl Parser {
                 TokenType::U16,
                 TokenType::U32,
                 TokenType::U64,
+                TokenType::I8,
+                TokenType::I16,
+                TokenType::I32,
+                TokenType::I64,
                 TokenType::Char,
             ])
             .unwrap();
@@ -174,6 +177,10 @@ impl Parser {
             TokenType::U16 => Type::U16,
             TokenType::U32 => Type::U32,
             TokenType::U64 => Type::U64,
+            TokenType::I8 => Type::I8,
+            TokenType::I16 => Type::I16,
+            TokenType::I32 => Type::I32,
+            TokenType::I64 => Type::I64,
             TokenType::Char => Type::Char,
             _ => panic!("Expected type"),
         };
@@ -205,11 +212,7 @@ impl Parser {
         let ty = self.parse_type();
 
         if identifiers.clone().len() == 1 {
-            let structure = if ty.is_array() {
-                SymbolType::Array
-            } else {
-                SymbolType::Variable
-            };
+            let structure = SymbolType::Variable;
             self.add_symbol(
                 identifiers[0].clone(),
                 structure,
@@ -242,7 +245,7 @@ impl Parser {
 
     fn if_statement(&mut self) -> Node {
         self.expect(vec![TokenType::LeftParen]).unwrap();
-        let expr = self.expression();
+        let mut expr = self.expression();
         match &expr {
             Node::BinaryExpr { operator, .. } => {
                 if operator.token_type != TokenType::Equal
@@ -258,7 +261,17 @@ impl Parser {
                     );
                 }
             }
-            _ => panic!("Expected comparison operator"),
+            // _ => panic!(
+            //     "Expected comparison operator but got {:?} at line {} column {}",
+            //     expr,
+            //     self.previous(1).line,
+            //     self.previous(1).column
+            // ),
+            _ => {
+                expr = Node::ToBool {
+                    expr: Box::new(expr),
+                };
+            }
         }
         self.expect(vec![TokenType::RightParen]).unwrap();
         let then_branch = self.compound_statement();
@@ -398,7 +411,11 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Node {
-        if self.match_token(vec![TokenType::Sub]) {
+        if self.match_token(vec![
+            TokenType::Sub,
+            TokenType::LogicalNot,
+            TokenType::Invert,
+        ]) {
             let operator = self.previous(1);
             let right = self.unary();
             return Node::UnaryExpr {
@@ -485,11 +502,109 @@ impl Parser {
                 right: Box::new(node.clone()),
                 ty: node.ty().unwrap().value_at(),
             };
+        } else if self.match_token(vec![TokenType::Inc]) {
+            node = self.prefix();
+
+            // ensure that the node is an identifier
+            match &node {
+                Node::LiteralExpr { value, .. } => match value {
+                    LiteralValue::Identifier(_) => {}
+                    _ => panic!("Expected identifier"),
+                },
+                _ => panic!("Expected identifier"),
+            }
+
+            node = Node::PreIncStmt {
+                right: Box::new(node),
+            };
+        } else if self.match_token(vec![TokenType::Dec]) {
+            node = self.prefix();
+
+            // ensure that the node is an identifier
+            match &node {
+                Node::LiteralExpr { value, .. } => match value {
+                    LiteralValue::Identifier(_) => {}
+                    _ => panic!("Expected identifier"),
+                },
+                _ => panic!("Expected identifier"),
+            }
+
+            node = Node::PreDecStmt {
+                right: Box::new(node),
+            };
         } else {
             node = self.primary();
         }
 
         node
+    }
+
+    fn postfix(&mut self) -> Node {
+        let identifier = self.previous(1);
+        match self.find_symbol(identifier.clone()) {
+            Some(symbol) => {
+                // TODO: This is hacky, fix it
+                if self.match_token(vec![TokenType::LeftParen]) {
+                    if symbol.structure != SymbolType::Function {
+                        panic!(
+                            "Expected function at line {} column {}",
+                            identifier.line, identifier.column
+                        );
+                    }
+                    return self.function_call();
+                } else {
+                    if symbol.structure != SymbolType::Variable {
+                        panic!(
+                            "Expected variable at line {} column {} got {:?}",
+                            identifier.line, identifier.column, symbol.structure
+                        );
+                    }
+                }
+
+                let left = if self.match_token(vec![TokenType::LeftBracket]) {
+                    self.array_access()
+                } else {
+                    Node::LiteralExpr {
+                        value: LiteralValue::Identifier(identifier.lexeme.clone().unwrap()),
+                        ty: symbol.ty.unwrap(),
+                    }
+                };
+
+                if self.match_token(vec![TokenType::Assign]) {
+                    let expr = self.expression();
+
+                    // expr = match self.modify_type(expr, symbol.ty.unwrap(), None) {
+                    //     Some(node) => node,
+                    //     None => panic!(
+                    //         "Incompatible types at line {} column {}",
+                    //         self.previous(1).line,
+                    //         self.previous(1).column
+                    //     ),
+                    // };
+
+                    return Node::AssignStmt {
+                        left: Box::new(left),
+                        expr: Box::new(expr),
+                    };
+                } else if self.match_token(vec![TokenType::Inc]) {
+                    return Node::PostIncStmt {
+                        left: Box::new(left),
+                    };
+                } else if self.match_token(vec![TokenType::Dec]) {
+                    return Node::PostDecStmt {
+                        left: Box::new(left),
+                    };
+                } else {
+                    return left;
+                }
+            }
+            None => panic!(
+                "Variable {} not declared at line {} column {}",
+                identifier.lexeme.clone().unwrap(),
+                identifier.line,
+                identifier.column
+            ),
+        }
     }
 
     fn primary(&mut self) -> Node {
@@ -513,65 +628,7 @@ impl Parser {
             };
             return Node::LiteralExpr { value, ty: ty };
         } else if self.match_token(vec![TokenType::Identifier]) {
-            let identifier = self.previous(1);
-            match self.find_symbol(identifier.clone()) {
-                Some(symbol) => {
-                    // TODO: This is hacky, fix it
-                    if self.match_token(vec![TokenType::LeftParen]) {
-                        if symbol.structure != SymbolType::Function {
-                            panic!(
-                                "Expected function at line {} column {}",
-                                identifier.line, identifier.column
-                            );
-                        }
-                        return self.function_call();
-                    } else {
-                        if symbol.structure != SymbolType::Variable
-                            && symbol.structure != SymbolType::Array
-                        {
-                            panic!(
-                                "Expected variable at line {} column {} got {:?}",
-                                identifier.line, identifier.column, symbol.structure
-                            );
-                        }
-                    }
-
-                    let left = if self.match_token(vec![TokenType::LeftBracket]) {
-                        self.array_access()
-                    } else {
-                        Node::LiteralExpr {
-                            value: LiteralValue::Identifier(identifier.lexeme.clone().unwrap()),
-                            ty: symbol.ty.unwrap(),
-                        }
-                    };
-
-                    if self.match_token(vec![TokenType::Assign]) {
-                        let expr = self.expression();
-
-                        // expr = match self.modify_type(expr, symbol.ty.unwrap(), None) {
-                        //     Some(node) => node,
-                        //     None => panic!(
-                        //         "Incompatible types at line {} column {}",
-                        //         self.previous(1).line,
-                        //         self.previous(1).column
-                        //     ),
-                        // };
-
-                        return Node::AssignStmt {
-                            left: Box::new(left),
-                            expr: Box::new(expr),
-                        };
-                    } else {
-                        return left;
-                    }
-                }
-                None => panic!(
-                    "Variable {} not declared at line {} column {}",
-                    identifier.lexeme.clone().unwrap(),
-                    identifier.line,
-                    identifier.column
-                ),
-            }
+            return self.postfix();
         } else if self.match_token(vec![TokenType::String]) {
             let val = match self.previous(1).value {
                 Some(Literal::String { value, label }) => value,
@@ -693,7 +750,7 @@ impl Parser {
 
     fn while_statement(&mut self) -> Node {
         self.expect(vec![TokenType::LeftParen]).unwrap();
-        let expr = self.expression();
+        let mut expr = self.expression();
         match &expr {
             Node::BinaryExpr { operator, .. } => {
                 if operator.token_type != TokenType::Equal
@@ -709,7 +766,12 @@ impl Parser {
                     );
                 }
             }
-            _ => panic!("Expected comparison operator"),
+            // _ => panic!("Expected comparison operator"),
+            _ => {
+                expr = Node::ToBool {
+                    expr: Box::new(expr),
+                };
+            }
         }
         self.expect(vec![TokenType::RightParen]).unwrap();
         let body = self.compound_statement();
@@ -740,7 +802,30 @@ impl Parser {
                 ty: Type::U8,
             }
         } else {
-            self.expression()
+            let mut expr = self.expression();
+            match &expr {
+                Node::BinaryExpr { operator, .. } => {
+                    if operator.token_type != TokenType::Equal
+                        && operator.token_type != TokenType::NotEqual
+                        && operator.token_type != TokenType::LessThan
+                        && operator.token_type != TokenType::LessThanOrEqual
+                        && operator.token_type != TokenType::GreaterThan
+                        && operator.token_type != TokenType::GreaterThanOrEqual
+                    {
+                        panic!(
+                            "Expected comparison operator at line {} column {}",
+                            operator.line, operator.column
+                        );
+                    }
+                }
+                // _ => panic!("Expected comparison operator"),
+                _ => {
+                    expr = Node::ToBool {
+                        expr: Box::new(expr),
+                    };
+                }
+            }
+            expr
         };
         self.expect(vec![TokenType::SemiColon]).unwrap();
 
@@ -963,9 +1048,9 @@ impl Parser {
         }
 
         let symbol = symbol.unwrap();
-        if symbol.structure != SymbolType::Array {
+        if symbol.structure != SymbolType::Variable {
             panic!(
-                "Expected array at line {} column {} got {:?}",
+                "Expected variable at line {} column {} got {:?}",
                 identifier.line, identifier.column, symbol.structure
             );
         }

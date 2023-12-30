@@ -33,6 +33,10 @@ pub enum TokenType {
     U16,
     U32,
     U64,
+    I8,
+    I16,
+    I32,
+    I64,
     While,
     Char,
 
@@ -54,6 +58,10 @@ pub enum TokenType {
     Comma,
     LeftBracket,
     RightBracket,
+    Or,
+    Xor,
+    LogicalNot,
+    Invert,
 
     // Double-character tokens
     Equal,
@@ -61,6 +69,11 @@ pub enum TokenType {
     LessThanOrEqual,
     GreaterThanOrEqual,
     LogicalAnd,
+    LogicalOr,
+    LeftShift,
+    RightShift,
+    Inc,
+    Dec,
 
     EOF,
 }
@@ -97,6 +110,10 @@ impl Lexer {
                 keywords.insert(String::from("u16"), TokenType::U16);
                 keywords.insert(String::from("u32"), TokenType::U32);
                 keywords.insert(String::from("u64"), TokenType::U64);
+                keywords.insert(String::from("i8"), TokenType::I8);
+                keywords.insert(String::from("i16"), TokenType::I16);
+                keywords.insert(String::from("i32"), TokenType::I32);
+                keywords.insert(String::from("i64"), TokenType::I64);
                 keywords.insert(String::from("while"), TokenType::While);
                 keywords.insert(String::from("char"), TokenType::Char);
                 keywords
@@ -130,10 +147,30 @@ impl Lexer {
         let c = self.advance();
 
         match c {
-            '+' => self.add_token(TokenType::Add),
-            '-' => self.add_token(TokenType::Sub),
+            '+' => {
+                if self.match_char('+') {
+                    self.add_token(TokenType::Inc);
+                } else {
+                    self.add_token(TokenType::Add);
+                }
+            }
+            '-' => {
+                if self.match_char('-') {
+                    self.add_token(TokenType::Dec);
+                } else {
+                    self.add_token(TokenType::Sub);
+                }
+            }
             '*' => self.add_token(TokenType::Mul),
-            '/' => self.add_token(TokenType::Div),
+            '/' => {
+                if self.match_char('/') {
+                    while self.peek() != '\n' && !self.is_at_end() {
+                        self.advance();
+                    }
+                } else {
+                    self.add_token(TokenType::Div);
+                }
+            }
             '(' => self.add_token(TokenType::LeftParen),
             ')' => self.add_token(TokenType::RightParen),
             '{' => self.add_token(TokenType::LeftBrace),
@@ -154,12 +191,14 @@ impl Lexer {
                 if self.match_char('=') {
                     self.add_token(TokenType::NotEqual);
                 } else {
-                    panic!("Unexpected character: {}", c);
+                    self.add_token(TokenType::LogicalNot);
                 }
             }
             '<' => {
                 if self.match_char('=') {
                     self.add_token(TokenType::LessThanOrEqual);
+                } else if self.match_char('<') {
+                    self.add_token(TokenType::LeftShift);
                 } else {
                     self.add_token(TokenType::LessThan);
                 }
@@ -167,6 +206,8 @@ impl Lexer {
             '>' => {
                 if self.match_char('=') {
                     self.add_token(TokenType::GreaterThanOrEqual);
+                } else if self.match_char('>') {
+                    self.add_token(TokenType::RightShift);
                 } else {
                     self.add_token(TokenType::GreaterThan);
                 }
@@ -178,6 +219,15 @@ impl Lexer {
                     self.add_token(TokenType::Ampersand);
                 }
             }
+            '|' => {
+                if self.match_char('|') {
+                    self.add_token(TokenType::LogicalOr);
+                } else {
+                    self.add_token(TokenType::Or);
+                }
+            }
+            '^' => self.add_token(TokenType::Xor),
+            '~' => self.add_token(TokenType::Invert),
             ' ' | '\t' | '\r' => {}
             '\n' => {
                 self.line += 1;
