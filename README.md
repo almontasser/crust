@@ -2,6 +2,8 @@
 
 This is a hobby project to learn about compilers and language design. I've designed the language to be similar to C and Rust.
 
+Heavily inspired by https://github.com/DoctorWkt/acwj
+
 ## Features
 
 [x] Global Variables
