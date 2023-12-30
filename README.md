@@ -24,6 +24,12 @@ cc -o bin out.s # Use the GNU C compiler to compile and link the assembly code t
 ./bin # Execute the produced binary
 ```
 
+## Run tests
+
+```sh
+./runtests.sh
+```
+
 ## Examples
 
 Some examples of the language
