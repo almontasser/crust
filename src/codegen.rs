@@ -318,9 +318,10 @@ printchar:
                 .text
                 .push_str(&format!("\tmovzx\t{}, {}\n", identifier, REGISTER_NAMES[r]));
         } else if ty == Type::U32 {
-            self.assembly
-                .text
-                .push_str(&format!("\tmovq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
+            self.assembly.text.push_str(&format!(
+                "\tmov\t{}, {}\n",
+                identifier, DWORD_REGISTER_NAMES[r]
+            ));
         } else if ty == Type::U64
             || ty == Type::PU8
             || ty == Type::PU16
