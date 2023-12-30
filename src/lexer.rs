@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use crate::utils::RNG;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Integer(u64),
@@ -87,6 +89,7 @@ pub struct Lexer {
     column: usize,
     keywords: HashMap<String, TokenType>,
     string_labels: Vec<String>,
+    rng: RNG,
 }
 
 impl Lexer {
@@ -119,6 +122,7 @@ impl Lexer {
                 keywords
             },
             string_labels: Vec::new(),
+            rng: RNG::new(),
         }
     }
 
@@ -378,7 +382,7 @@ impl Lexer {
             if i > 4 {
                 if self.string_labels.contains(&label) {
                     // add random hex digit to label
-                    label.push_str(&format!("{:x}", self.random() % 16));
+                    label.push_str(&format!("{:x}", self.rng.random() % 16));
                     continue;
                 } else {
                     break;
@@ -388,22 +392,5 @@ impl Lexer {
         }
         self.string_labels.push(label.clone());
         label
-    }
-
-    fn random(&self) -> usize {
-        // generate random number between 0 and 255 without using rand crate or getrandom
-        let seed = self.current;
-        let mut x = 123456789 ^ seed;
-        let mut y = 1103515245 ^ seed;
-        let mut w = 12345 ^ seed;
-        let mut z = 987654321 ^ seed;
-
-        let t = x ^ (x << 11);
-        x = y;
-        y = w;
-        w = z;
-        z = z ^ (z >> 19) ^ (t ^ (t >> 8));
-
-        z
     }
 }

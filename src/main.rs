@@ -8,6 +8,7 @@ mod codegen;
 mod lexer;
 mod parser;
 mod types;
+mod utils;
 
 fn _print_node(node: Node, ident: u8) {
     for _ in 0..ident {

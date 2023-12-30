@@ -98,11 +98,4 @@ impl Type {
             _ => false,
         }
     }
-
-    pub fn is_array(&self) -> bool {
-        match self {
-            Type::Array { .. } => true,
-            _ => false,
-        }
-    }
 }

@@ -96,9 +96,7 @@ impl CodeGen {
                 }
             }
             Node::UnaryExpr {
-                operator,
-                right,
-                ty,
+                operator, right, ..
             } => {
                 match operator.token_type {
                     TokenType::Sub => {
@@ -401,7 +399,7 @@ impl CodeGen {
             self.assembly
                 .text
                 .push_str(&format!("\tmovq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
-        } else if let Type::Array { ty, count } = ty {
+        } else if let Type::Array { .. } = ty {
             self.assembly
                 .text
                 .push_str(&format!("\tleaq\t{}, {}\n", identifier, REGISTER_NAMES[r]));

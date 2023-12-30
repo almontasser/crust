@@ -631,7 +631,7 @@ impl Parser {
             return self.postfix();
         } else if self.match_token(vec![TokenType::String]) {
             let val = match self.previous(1).value {
-                Some(Literal::String { value, label }) => value,
+                Some(Literal::String { value, .. }) => value,
                 _ => panic!("Expected string"),
             };
 
@@ -640,7 +640,7 @@ impl Parser {
                 count: val.len() as u64,
             };
             let label = match self.previous(1).value {
-                Some(Literal::String { value, label }) => label,
+                Some(Literal::String { label, .. }) => label,
                 _ => panic!("Expected string"),
             };
             return Node::LiteralExpr {
