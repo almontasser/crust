@@ -214,22 +214,88 @@ impl CodeGen {
 
     fn preamble(&mut self) {
         self.free_all_registers();
+        self.assembly.data.push_str("\t.data\n");
+        self.assembly.data.push_str("buffer: .space 21\n");
+
         self.assembly.text.push_str("\t.text\n");
-        self.assembly.text.push_str(".LC0:\n");
-        self.assembly.text.push_str("\t.string\t\"%d\\n\"\n");
-        self.assembly.text.push_str("printint:\n");
-        self.assembly.text.push_str("\tpushq\t%rbp\n");
-        self.assembly.text.push_str("\tmovq\t%rsp, %rbp\n");
-        self.assembly.text.push_str("\tsubq\t$16, %rsp\n");
-        self.assembly.text.push_str("\tmovl\t%edi, -4(%rbp)\n");
-        self.assembly.text.push_str("\tmovl\t-4(%rbp), %eax\n");
-        self.assembly.text.push_str("\tmovl\t%eax, %esi\n");
-        self.assembly.text.push_str("\tleaq\t.LC0(%rip), %rdi\n");
-        self.assembly.text.push_str("\tmovl\t$0, %eax\n");
-        self.assembly.text.push_str("\tcall\tprintf@PLT\n");
-        self.assembly.text.push_str("\tnop\n");
-        self.assembly.text.push_str("\tleave\n");
-        self.assembly.text.push_str("\tret\n\n");
+
+        self.assembly.text.push_str(
+            "
+.global printint
+printint:
+    # Prologue
+    push %rbp
+    mov %rsp, %rbp
+
+    # Check if input number is 0
+    cmp $0, %rdi
+    je print_zero
+
+    # Prepare for conversion
+    mov %rdi, %rax        # Copy number to rax
+    mov $buffer+20, %rsi  # Load address of the second last digit space
+    movb $10, (%rsi)     # Store newline character after the number
+
+    # Convert number to string
+convert_loop:
+    xor %rdx, %rdx        # Clear rdx for div
+    mov $10, %rbx         # Set divisor to 10
+    div %rbx              # Divide rax by 10, result in rax, remainder in rdx
+    add $48, %rdx         # Convert remainder to ASCII
+    dec %rsi
+    mov %dl, (%rsi)       # Store ASCII character
+    test %rax, %rax       # Check if number is zero
+    jnz convert_loop      # If not, continue loop
+
+    # Set up for write syscall
+    movq $buffer+21, %rdi
+    subq %rsi, %rdi
+    movq %rdi, %rdx
+    mov $1, %rax          # syscall number for sys_write
+    mov $1, %rdi          # file descriptor 1 (stdout)
+    syscall
+
+    # Epilogue
+    mov $0, %rax
+    leave
+    ret
+
+print_zero:
+    # Handle printing 0
+    mov $1, %rax          # syscall number for sys_write
+    mov $1, %rdi          # file descriptor 1 (stdout)
+    lea buffer+19, %rsi   # point to '0'
+    movb $'0', (%rsi)     # place '0' in buffer
+    movb $10, 1(%rsi)     # place newline after '0'
+    mov $2, %rdx          # length is 2 (including newline)
+    syscall
+
+    mov $0, %rax
+    leave
+    ret
+
+.global printchar
+printchar:
+    # Prologue
+    push %rbp
+    mov %rsp, %rbp
+
+    # Move character to buffer
+    lea buffer, %rsi
+    mov %rdi, (%rsi)
+
+    # Set up for write syscall
+    mov $1, %rax          # syscall number for sys_write
+    mov $1, %rdi          # file descriptor 1 (stdout)
+    mov $1, %rdx          # length is 1
+    syscall
+
+    # Epilogue
+    mov $0, %rax
+    leave
+    ret
+",
+        );
     }
 
     fn load(&mut self, value: u64, _ty: Type) -> usize {
