@@ -308,7 +308,7 @@ printchar:
 
     fn load_global(&mut self, identifier: String, ty: Type) -> usize {
         let r = self.allocate_register();
-        if ty == Type::U8 {
+        if ty == Type::U8 || ty == Type::Char {
             self.assembly.text.push_str(&format!(
                 "\tmovzbq\t{}, {}\n",
                 identifier, REGISTER_NAMES[r]
