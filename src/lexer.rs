@@ -4,6 +4,7 @@ use std::collections::HashMap;
 pub enum Literal {
     Integer(u64),
     Identifier(String),
+    String { value: String, label: String },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -19,6 +20,7 @@ pub struct Token {
 pub enum TokenType {
     Identifier,
     Integer,
+    String,
 
     // Keywords
     Else,
@@ -32,6 +34,7 @@ pub enum TokenType {
     U32,
     U64,
     While,
+    Char,
 
     // Single-character tokens
     Add,
@@ -70,6 +73,7 @@ pub struct Lexer {
     line: usize,
     column: usize,
     keywords: HashMap<String, TokenType>,
+    string_labels: Vec<String>,
 }
 
 impl Lexer {
@@ -94,8 +98,10 @@ impl Lexer {
                 keywords.insert(String::from("u32"), TokenType::U32);
                 keywords.insert(String::from("u64"), TokenType::U64);
                 keywords.insert(String::from("while"), TokenType::While);
+                keywords.insert(String::from("char"), TokenType::Char);
                 keywords
             },
+            string_labels: Vec::new(),
         }
     }
 
@@ -177,6 +183,8 @@ impl Lexer {
                 self.line += 1;
                 self.column = 1;
             }
+            '\'' => self.character(),
+            '"' => self.string(),
             c if c.is_digit(10) => self.number(),
             c if c.is_alphabetic() || c == '_' => self.identifier(),
             _ => panic!("Unexpected character: {}", c),
@@ -251,5 +259,101 @@ impl Lexer {
         self.current += 1;
         self.column += 1;
         true
+    }
+
+    fn escape_char(&self, c: char) -> char {
+        match c {
+            'a' => '\x07',
+            'b' => '\x08',
+            'f' => '\x0c',
+            'n' => '\n',
+            'r' => '\r',
+            't' => '\t',
+            'v' => '\x0b',
+            '\'' => '\'',
+            '\\' => '\\',
+            '"' => '"',
+            _ => panic!("Unexpected escape character: {}", c),
+        }
+    }
+
+    fn character(&mut self) {
+        let mut c = self.advance();
+        if c == '\\' {
+            c = self.advance();
+            c = self.escape_char(c);
+        }
+
+        if self.advance() != '\'' {
+            panic!("Expected closing quote");
+        }
+
+        self.add_token_literal(TokenType::Integer, Some(Literal::Integer(c as u64)));
+    }
+
+    fn string(&mut self) {
+        let mut str = String::new();
+        while self.peek() != '"' && !self.is_at_end() {
+            if self.peek() == '\n' {
+                self.line += 1;
+                self.column = 1;
+            } else if self.peek() == '\\' {
+                self.advance();
+                let c = self.advance();
+                str.push(self.escape_char(c));
+            } else {
+                str.push(self.advance());
+            }
+        }
+
+        if self.is_at_end() {
+            panic!("Unterminated string");
+        }
+
+        self.advance();
+
+        let label = self.label_for_str(str.clone());
+        self.add_token_literal(
+            TokenType::String,
+            Some(Literal::String {
+                value: str,
+                label: label.clone(),
+            }),
+        );
+    }
+
+    fn label_for_str(&mut self, s: String) -> String {
+        let mut label = String::from("str_");
+        for (i, c) in s.char_indices() {
+            if i > 4 {
+                if self.string_labels.contains(&label) {
+                    // add random hex digit to label
+                    label.push_str(&format!("{:x}", self.random() % 16));
+                    continue;
+                } else {
+                    break;
+                }
+            }
+            label.push_str(&format!("{:x}", c as u32));
+        }
+        self.string_labels.push(label.clone());
+        label
+    }
+
+    fn random(&self) -> usize {
+        // generate random number between 0 and 255 without using rand crate or getrandom
+        let seed = self.current;
+        let mut x = 123456789 ^ seed;
+        let mut y = 1103515245 ^ seed;
+        let mut w = 12345 ^ seed;
+        let mut z = 987654321 ^ seed;
+
+        let t = x ^ (x << 11);
+        x = y;
+        y = w;
+        w = z;
+        z = z ^ (z >> 19) ^ (t ^ (t >> 8));
+
+        z
     }
 }

@@ -65,6 +65,10 @@ impl CodeGen {
                 LiteralValue::U32(u) => self.load(u as u64, ty),
                 LiteralValue::U64(u) => self.load(u as u64, ty),
                 LiteralValue::Identifier(i) => self.load_global(i, ty),
+                LiteralValue::String { value: s, label } => {
+                    self.define_string(label.clone(), s);
+                    self.load_string(label)
+                }
             },
             Node::BinaryExpr {
                 left,
@@ -331,7 +335,7 @@ printchar:
             self.assembly
                 .text
                 .push_str(&format!("\tmovq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
-        } else if let Type::Array { ty: _, count: _ } = ty {
+        } else if let Type::Array { ty, count } = ty {
             self.assembly
                 .text
                 .push_str(&format!("\tleaq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
@@ -637,9 +641,6 @@ printchar:
     }
 
     fn function_postamble(&mut self, fn_name: String) {
-        // self.assembly.text.push_str(&format!("\tmovl\t$0, %eax\n"));
-        // self.assembly.text.push_str(&format!("\tpopq\t%rbp\n"));
-        // self.assembly.text.push_str(&format!("\tret\n"));
         self.assembly
             .text
             .push_str(format!("{}_end:\n", fn_name).as_str());
@@ -770,5 +771,21 @@ printchar:
             _ => panic!("Unexpected type {:?}", ty),
         };
         expr_node
+    }
+
+    fn define_string(&mut self, label: String, s: String) {
+        self.assembly.data.push_str(&format!("{}:\n", label));
+        for c in s.as_bytes() {
+            self.assembly.data.push_str(&format!("\t.byte\t{}\n", c));
+        }
+        self.assembly.data.push_str("\t.byte\t0\n");
+    }
+
+    fn load_string(&mut self, label: String) -> usize {
+        let r = self.allocate_register();
+        self.assembly
+            .text
+            .push_str(&format!("\tleaq\t{}, {}\n", label, REGISTER_NAMES[r]));
+        r
     }
 }

@@ -7,6 +7,7 @@ pub enum LiteralValue {
     U32(u32),
     U64(u64),
     Identifier(String),
+    String { value: String, label: String },
 }
 
 #[derive(Debug, Clone)]

@@ -8,6 +8,7 @@ pub enum Type {
     PU16,
     PU32,
     PU64,
+    Char,
     Array { ty: Box<Type>, count: u64 },
 }
 
@@ -22,6 +23,7 @@ impl Type {
             Type::PU16 => 8,
             Type::PU32 => 8,
             Type::PU64 => 8,
+            Type::Char => 1,
             Type::Array { ty, .. } => ty.size(),
         }
     }
@@ -32,6 +34,7 @@ impl Type {
             Type::U16 => Type::PU16,
             Type::U32 => Type::PU32,
             Type::U64 => Type::PU64,
+            Type::Char => Type::PU8,
             _ => panic!("Cannot take pointer of type {:?}", self),
         }
     }

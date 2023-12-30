@@ -52,6 +52,19 @@ impl Parser {
                     end_label: None,
                     size: None,
                 },
+                Symbol {
+                    identifier: Token {
+                        token_type: TokenType::Identifier,
+                        lexeme: Some(String::from("printchar")),
+                        line: 0,
+                        column: 0,
+                        value: None,
+                    },
+                    structure: SymbolType::Function,
+                    ty: Some(Type::U8),
+                    end_label: None,
+                    size: None,
+                },
             ],
             current_fn: None,
         }
@@ -140,6 +153,7 @@ impl Parser {
                 TokenType::U16,
                 TokenType::U32,
                 TokenType::U64,
+                TokenType::Char,
             ])
             .unwrap();
 
@@ -160,6 +174,7 @@ impl Parser {
             TokenType::U16 => Type::U16,
             TokenType::U32 => Type::U32,
             TokenType::U64 => Type::U64,
+            TokenType::Char => Type::Char,
             _ => panic!("Expected type"),
         };
 
@@ -557,6 +572,24 @@ impl Parser {
                     identifier.column
                 ),
             }
+        } else if self.match_token(vec![TokenType::String]) {
+            let val = match self.previous(1).value {
+                Some(Literal::String { value, label }) => value,
+                _ => panic!("Expected string"),
+            };
+
+            let ty = Type::Array {
+                ty: Box::new(Type::U8),
+                count: val.len() as u64,
+            };
+            let label = match self.previous(1).value {
+                Some(Literal::String { value, label }) => label,
+                _ => panic!("Expected string"),
+            };
+            return Node::LiteralExpr {
+                value: LiteralValue::String { value: val, label },
+                ty,
+            };
         }
 
         let token = self.peek();
