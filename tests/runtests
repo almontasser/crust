@@ -2,7 +2,7 @@
 # Run each test and compare
 # against known good output
 
-if [ ! -f ../target/debug/zcompiler ]
+if [ ! -f ../target/debug/crust ]
 then echo "Need to build the compiler first!"; exit 1
 fi
 
@@ -11,7 +11,7 @@ do if [ ! -f "out.$i" ]
    then echo "Can't run test on $i, no output file!"
    else
      echo -n $i
-     ../target/debug/zcompiler $i
+     ../target/debug/crust $i
     #  nasm -f elf64 out.s
      cc -no-pie -o out out.s
      ./out > trial.$i
