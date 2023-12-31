@@ -6,17 +6,30 @@ Heavily inspired by https://github.com/DoctorWkt/acwj
 
 ## Features
 
-[x] Global Variables
-[x] Functions
-[x] Arrays
-[x] Integers (signed and unsigned)
-[x] Strings
-[x] Binary Operations
-[x] Code Generation (GNU Assembly)
-[x] Print to Console
-[x] If Statements
-[x] While Statements
-[x] For Statements
+- [x] Global Variables
+- [x] Functions
+- [x] Arrays
+- [x] Integers (signed and unsigned)
+- [x] Strings
+- [x] Binary Operations
+- [x] Code Generation (GNU Assembly)
+- [x] Print to Console
+- [x] If Statements
+- [x] While Statements
+- [x] For Statements
+- [ ] Local Variables (Scopes)
+- [ ] Dynamic Arrays
+- [ ] Structs
+- [ ] Function Parameters
+- [ ] Unions
+- [ ] Enums
+- [ ] Breakk & Continue
+- [ ] Variable Initialization
+- [ ] Casting
+- [ ] Sizeof
+- [ ] Static
+- [ ] Struct Methods
+- [ ] Struct Traits
 
 ## How to use
 
