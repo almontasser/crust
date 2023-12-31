@@ -13,10 +13,11 @@ Heavily inspired by https://github.com/DoctorWkt/acwj
 - [x] Strings
 - [x] Binary Operations
 - [x] Code Generation (GNU Assembly)
-- [x] Print to Console
+- [x] Print to Console (integers & ascii characters)
 - [x] If Statements
 - [x] While Statements
 - [x] For Statements
+- [ ] Reading from console
 - [ ] Local Variables (Scopes)
 - [ ] Dynamic Arrays
 - [ ] Structs
