@@ -193,7 +193,7 @@ fn main() {
     if !DEBUG {
         let args: Vec<String> = std::env::args().collect();
         if args.len() != 2 {
-            println!("Usage: zcompiler <source>");
+            println!("Usage: crust <source>");
             std::process::exit(1);
         }
 
