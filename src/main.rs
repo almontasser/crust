@@ -65,26 +65,20 @@ fn _print_node(node: Node, ident: u8) {
             }
             println!("value: {:?}", value);
         }
-        Node::GlobalVar { identifier, ty } => {
+        Node::VarDecl { symbol, ty, .. } => {
             println!("GlobalVar");
             for _ in 0..ident + 1 {
                 print!("  ");
             }
-            match identifier.value {
-                Some(lexer::Literal::Identifier(ref s)) => println!("{}: {:?}", s, ty),
-                _ => panic!("Expected identifier"),
-            }
+            println!("{}: {:?}", symbol.identifier.lexeme.unwrap(), ty)
         }
-        Node::GlobalVarMany { identifiers, ty } => {
+        Node::VarDeclMany { symbols, ty, .. } => {
             println!("GlobalVarMany");
             for _ in 0..ident + 1 {
                 print!("  ");
             }
-            for identifier in identifiers {
-                match identifier.value {
-                    Some(lexer::Literal::Identifier(ref s)) => println!("{}: {:?}", s, ty),
-                    _ => panic!("Expected identifier"),
-                }
+            for symbol in symbols {
+                println!("{}: {:?}", symbol.identifier.lexeme.unwrap(), ty)
             }
         }
         Node::AssignStmt { left, expr } => {
@@ -131,6 +125,7 @@ fn _print_node(node: Node, ident: u8) {
             identifier,
             body,
             return_type,
+            ..
         } => {
             println!("FnDecl");
             for _ in 0..ident + 1 {
@@ -186,7 +181,7 @@ fn _print_node(node: Node, ident: u8) {
 }
 
 const DEBUG: bool = false;
-const DEBUG_TEST_FILE: &str = "tests/test23";
+const DEBUG_TEST_FILE: &str = "tests/test24";
 
 fn main() {
     let source: String;

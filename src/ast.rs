@@ -6,7 +6,7 @@ pub enum LiteralValue {
     U16(u16),
     U32(u32),
     U64(u64),
-    Identifier(String),
+    Identifier(Symbol),
     String { value: String, label: String },
 }
 
@@ -36,12 +36,14 @@ pub enum Node {
         value: LiteralValue,
         ty: Type,
     },
-    GlobalVar {
-        identifier: Token,
+    VarDecl {
+        symbol: Symbol,
+        is_local: bool,
         ty: Type,
     },
-    GlobalVarMany {
-        identifiers: Vec<Token>,
+    VarDeclMany {
+        symbols: Vec<Symbol>,
+        is_local: bool,
         ty: Type,
     },
     AssignStmt {
@@ -63,6 +65,7 @@ pub enum Node {
     FnDecl {
         identifier: Token,
         body: Box<Node>,
+        stack_size: usize,
         return_type: Option<Type>,
     },
     FnCall {
@@ -99,8 +102,8 @@ impl Node {
             Node::WidenExpr { ty, .. } => Some(ty.clone()),
             Node::ScaleExpr { ty, .. } => Some(ty.clone()),
             Node::LiteralExpr { ty, .. } => Some(ty.clone()),
-            Node::GlobalVar { ty, .. } => Some(ty.clone()),
-            Node::GlobalVarMany { ty, .. } => Some(ty.clone()),
+            Node::VarDecl { ty, .. } => Some(ty.clone()),
+            Node::VarDeclMany { ty, .. } => Some(ty.clone()),
             Node::AssignStmt { expr, .. } => expr.ty(),
             Node::CompoundStmt { .. } => None,
             Node::IfStmt { .. } => None,

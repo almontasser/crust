@@ -13,12 +13,20 @@ pub enum SymbolType {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum StorageClass {
+    Global,
+    Local,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Symbol {
     pub identifier: Token,
     pub structure: SymbolType,
+    pub class: StorageClass,
     pub ty: Option<Type>,
     pub end_label: Option<String>,
     pub size: Option<usize>,
+    pub offset: Option<isize>,
 }
 
 pub struct Parser {
@@ -27,6 +35,7 @@ pub struct Parser {
     nodes: Vec<Node>,
     symbols: Vec<Symbol>,
     current_fn: Option<Symbol>,
+    local_offset: usize,
 }
 
 impl Parser {
@@ -47,9 +56,11 @@ impl Parser {
                         value: None,
                     },
                     structure: SymbolType::Function,
+                    class: StorageClass::Global,
                     ty: Some(Type::U8),
                     end_label: None,
                     size: None,
+                    offset: None,
                 },
                 Symbol {
                     identifier: Token {
@@ -60,19 +71,22 @@ impl Parser {
                         value: None,
                     },
                     structure: SymbolType::Function,
+                    class: StorageClass::Global,
                     ty: Some(Type::U8),
                     end_label: None,
                     size: None,
+                    offset: None,
                 },
             ],
             current_fn: None,
+            local_offset: 0,
         }
     }
 
     pub fn parse(&mut self) -> &Vec<Node> {
         while !self.is_at_end() {
             let node = if self.match_token(vec![TokenType::Let]) {
-                let node = self.var_decl();
+                let node = self.var_decl(false);
                 self.expect(vec![TokenType::SemiColon]).unwrap();
                 node
             } else {
@@ -98,8 +112,8 @@ impl Parser {
             let node = self.single_statement();
             match node {
                 Node::AssignStmt { .. }
-                | Node::GlobalVar { .. }
-                | Node::GlobalVarMany { .. }
+                | Node::VarDecl { .. }
+                | Node::VarDeclMany { .. }
                 | Node::FnCall { .. }
                 | Node::ReturnStmt { .. } => {
                     self.expect(vec![TokenType::SemiColon]).unwrap();
@@ -116,7 +130,7 @@ impl Parser {
 
     fn single_statement(&mut self) -> Node {
         if self.match_token(vec![TokenType::Let]) {
-            return self.var_decl();
+            return self.var_decl(true);
         // } else if self.match_token(vec![TokenType::Identifier]) {
         //     return self.assignment();
         } else if self.match_token(vec![TokenType::If]) {
@@ -199,8 +213,14 @@ impl Parser {
         ty
     }
 
-    fn var_decl(&mut self) -> Node {
+    fn var_decl(&mut self, is_local: bool) -> Node {
         let mut identifiers = Vec::new();
+        let class = if is_local {
+            StorageClass::Local
+        } else {
+            StorageClass::Global
+        };
+
         while self.match_token(vec![TokenType::Identifier]) {
             identifiers.push(self.previous(1));
 
@@ -212,32 +232,51 @@ impl Parser {
         let ty = self.parse_type();
 
         if identifiers.clone().len() == 1 {
+            let offset = if is_local {
+                Some(self.gen_offset(ty.clone()))
+            } else {
+                None
+            };
+
             let structure = SymbolType::Variable;
-            self.add_symbol(
+            let symbol = self.add_symbol(
                 identifiers[0].clone(),
                 structure,
+                class.clone(),
                 Some(ty.clone()),
                 None,
                 None,
+                offset,
             );
 
-            Node::GlobalVar {
-                identifier: identifiers[0].clone(),
+            Node::VarDecl {
+                symbol,
+                is_local,
                 ty: ty.clone(),
             }
         } else {
+            let mut symbols = Vec::new();
             for identifier in &identifiers {
-                self.add_symbol(
+                let offset = if is_local {
+                    Some(self.gen_offset(ty.clone()))
+                } else {
+                    None
+                };
+
+                symbols.push(self.add_symbol(
                     identifier.clone(),
                     SymbolType::Variable,
+                    class.clone(),
                     Some(ty.clone()),
                     None,
                     None,
-                );
+                    offset,
+                ));
             }
 
-            Node::GlobalVarMany {
-                identifiers,
+            Node::VarDeclMany {
+                symbols,
+                is_local,
                 ty: ty.clone(),
             }
         }
@@ -289,7 +328,41 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Node {
-        let node = self.equality();
+        let node = self.logical_expr();
+        node
+    }
+
+    fn logical_expr(&mut self) -> Node {
+        let mut node = self.bitwise_expr();
+
+        while self.match_token(vec![TokenType::LogicalAnd, TokenType::LogicalOr]) {
+            let operator = self.previous(1);
+            let right = self.bitwise_expr();
+            node = Node::BinaryExpr {
+                left: Box::new(node),
+                operator,
+                right: Box::new(right),
+                ty: Type::U8,
+            };
+        }
+
+        node
+    }
+
+    fn bitwise_expr(&mut self) -> Node {
+        let mut node = self.equality();
+
+        while self.match_token(vec![TokenType::Or, TokenType::Xor, TokenType::Ampersand]) {
+            let operator = self.previous(1);
+            let right = self.equality();
+            node = Node::BinaryExpr {
+                left: Box::new(node),
+                operator,
+                right: Box::new(right),
+                ty: Type::U8,
+            };
+        }
+
         node
     }
 
@@ -311,7 +384,7 @@ impl Parser {
     }
 
     fn comparison(&mut self) -> Node {
-        let mut node = self.term();
+        let mut node = self.shift();
 
         while self.match_token(vec![
             TokenType::LessThan,
@@ -319,6 +392,23 @@ impl Parser {
             TokenType::GreaterThan,
             TokenType::GreaterThanOrEqual,
         ]) {
+            let operator = self.previous(1);
+            let right = self.shift();
+            node = Node::BinaryExpr {
+                left: Box::new(node),
+                operator,
+                right: Box::new(right),
+                ty: Type::U8,
+            };
+        }
+
+        node
+    }
+
+    fn shift(&mut self) -> Node {
+        let mut node = self.term();
+
+        while self.match_token(vec![TokenType::LeftShift, TokenType::RightShift]) {
             let operator = self.previous(1);
             let right = self.term();
             node = Node::BinaryExpr {
@@ -564,8 +654,17 @@ impl Parser {
                 let left = if self.match_token(vec![TokenType::LeftBracket]) {
                     self.array_access()
                 } else {
+                    let symbol = self.find_symbol(identifier.clone()).unwrap_or_else(|| {
+                        panic!(
+                            "Variable {} not declared at line {} column {}",
+                            identifier.lexeme.clone().unwrap(),
+                            identifier.line,
+                            identifier.column
+                        )
+                    });
+
                     Node::LiteralExpr {
-                        value: LiteralValue::Identifier(identifier.lexeme.clone().unwrap()),
+                        value: LiteralValue::Identifier(symbol.clone()),
                         ty: symbol.ty.unwrap(),
                     }
                 };
@@ -711,9 +810,11 @@ impl Parser {
         &mut self,
         identifier: Token,
         structure: SymbolType,
+        class: StorageClass,
         ty: Option<Type>,
         end_label: Option<String>,
         size: Option<usize>,
+        offset: Option<isize>,
     ) -> Symbol {
         let symbol = self.find_symbol(identifier.clone());
         if symbol.is_some() {
@@ -728,9 +829,11 @@ impl Parser {
         let symbol = Symbol {
             identifier,
             structure,
+            class,
             ty: ty,
             end_label,
             size,
+            offset,
         };
 
         self.symbols.push(symbol.clone());
@@ -739,13 +842,17 @@ impl Parser {
     }
 
     fn find_symbol(&self, identifier: Token) -> Option<Symbol> {
-        for symbol in &self.symbols {
-            if symbol.identifier.lexeme.clone().unwrap() == identifier.lexeme.clone().unwrap() {
-                return Some(symbol.clone());
+        let mut symbol: Option<Symbol> = None;
+        for it in &self.symbols {
+            if it.identifier.lexeme.clone().unwrap() == identifier.lexeme.clone().unwrap() {
+                symbol = Some(it.clone());
+                if it.class == StorageClass::Local {
+                    break;
+                }
             }
         }
 
-        None
+        symbol
     }
 
     fn while_statement(&mut self) -> Node {
@@ -873,11 +980,14 @@ impl Parser {
         let symbol = self.add_symbol(
             identifier.clone(),
             SymbolType::Function,
+            StorageClass::Global,
             ty.clone(),
             end_label,
             None,
+            None,
         );
         self.current_fn = Some(symbol.clone());
+        self.reset_offset();
         let body = self.compound_statement();
         // ensure that the function returns a value if it has a return type in the last statement
         if ty.is_some() {
@@ -917,6 +1027,7 @@ impl Parser {
         Node::FnDecl {
             identifier,
             body: Box::new(body),
+            stack_size: self.local_offset,
             return_type: ty,
         }
     }
@@ -1055,8 +1166,16 @@ impl Parser {
             );
         }
 
+        let symbol = self.find_symbol(identifier.clone()).unwrap_or_else(|| {
+            panic!(
+                "Variable {} not declared at line {} column {}",
+                identifier.lexeme.clone().unwrap(),
+                identifier.line,
+                identifier.column
+            )
+        });
         let mut left = Node::LiteralExpr {
-            value: LiteralValue::Identifier(identifier.lexeme.clone().unwrap()),
+            value: LiteralValue::Identifier(symbol.clone()),
             ty: symbol.ty.unwrap(),
         };
 
@@ -1105,5 +1224,15 @@ impl Parser {
             right: Box::new(left.clone()),
             ty: left.ty().unwrap(),
         }
+    }
+
+    fn gen_offset(&mut self, ty: Type) -> isize {
+        let size = ty.size().max(4);
+        self.local_offset += size;
+        -(self.local_offset as isize)
+    }
+
+    fn reset_offset(&mut self) {
+        self.local_offset = 0;
     }
 }

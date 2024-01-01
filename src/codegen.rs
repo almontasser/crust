@@ -1,7 +1,7 @@
 use crate::{
     ast::{LiteralValue, Node},
     lexer::{Token, TokenType},
-    parser::Symbol,
+    parser::{StorageClass, Symbol},
     types::Type,
 };
 
@@ -64,7 +64,10 @@ impl CodeGen {
                 LiteralValue::U16(u) => self.load(u as u64, ty),
                 LiteralValue::U32(u) => self.load(u as u64, ty),
                 LiteralValue::U64(u) => self.load(u as u64, ty),
-                LiteralValue::Identifier(i) => self.load_global(i, ty),
+                LiteralValue::Identifier(s) => match s.class {
+                    StorageClass::Local => self.load_local(s, ty),
+                    StorageClass::Global => self.load_global(s, ty),
+                },
                 LiteralValue::String { value: s, label } => {
                     self.define_string(label.clone(), s);
                     self.load_string(label)
@@ -74,7 +77,7 @@ impl CodeGen {
                 left,
                 operator,
                 right,
-                ..
+                ty,
             } => {
                 let left = self.generate_node(*left);
                 let right = self.generate_node(*right);
@@ -92,6 +95,13 @@ impl CodeGen {
                     | TokenType::GreaterThanOrEqual => {
                         self.compare_and_set(operator.token_type, left, right)
                     }
+                    TokenType::LogicalAnd => self.logical_and(left, right, ty),
+                    TokenType::LogicalOr => self.logical_or(left, right, ty),
+                    TokenType::Ampersand => self.bitwise_and(left, right, ty),
+                    TokenType::Or => self.bitwise_or(left, right, ty),
+                    TokenType::Xor => self.bitwise_xor(left, right, ty),
+                    TokenType::LeftShift => self.shift_left(left, right, ty),
+                    TokenType::RightShift => self.shift_right(left, right, ty),
                     _ => panic!("Unexpected token {:?}", operator),
                 }
             }
@@ -105,15 +115,15 @@ impl CodeGen {
                     }
                     TokenType::Ampersand => {
                         // get identifier
-                        let identifier = match &*right {
+                        let symbol = match &*right {
                             Node::LiteralExpr { value, .. } => match value {
-                                LiteralValue::Identifier(i) => i,
+                                LiteralValue::Identifier(s) => s,
                                 _ => panic!("Unexpected token {:?}", right),
                             },
                             _ => panic!("Unexpected token {:?}", right),
                         };
 
-                        self.address_of(identifier.to_string())
+                        self.address_of(symbol.clone())
                     }
                     TokenType::Mul => {
                         let right_node = self.generate_node(*right.clone());
@@ -144,13 +154,25 @@ impl CodeGen {
                 let right_node = self.generate_node(*right.clone());
                 self.widen(right_node, right.ty().unwrap(), ty)
             }
-            Node::GlobalVar { identifier, ty } => {
-                self.define_global(identifier.lexeme.unwrap(), ty);
+            Node::VarDecl {
+                symbol,
+                is_local,
+                ty,
+            } => {
+                if !is_local {
+                    self.define_global(symbol.identifier.lexeme.unwrap(), ty);
+                }
                 0
             }
-            Node::GlobalVarMany { identifiers, ty } => {
-                for identifier in identifiers {
-                    self.define_global(identifier.lexeme.unwrap(), ty.clone());
+            Node::VarDeclMany {
+                symbols,
+                is_local,
+                ty,
+            } => {
+                for symbol in symbols {
+                    if !is_local {
+                        self.define_global(symbol.identifier.lexeme.unwrap(), ty.clone());
+                    }
                 }
                 0
             }
@@ -158,9 +180,9 @@ impl CodeGen {
                 self.assignment_depth += 1;
                 let r = match *left.clone() {
                     Node::LiteralExpr { value, .. } => match value {
-                        LiteralValue::Identifier(i) => {
+                        LiteralValue::Identifier(s) => {
                             let register = self.generate_node(*expr.clone());
-                            self.store(register, i, expr.ty().unwrap());
+                            self.store(register, s, expr.ty().unwrap());
                             self.assignment_depth -= 1;
                             register
                         }
@@ -203,8 +225,11 @@ impl CodeGen {
             }
             Node::WhileStmt { condition, body } => self.while_stmt(condition, body),
             Node::FnDecl {
-                identifier, body, ..
-            } => self.function(identifier, body),
+                identifier,
+                body,
+                stack_size,
+                ..
+            } => self.function(identifier, stack_size, body),
             Node::FnCall {
                 identifier, expr, ..
             } => {
@@ -352,8 +377,9 @@ impl CodeGen {
         r
     }
 
-    fn load_global(&mut self, identifier: String, ty: Type) -> usize {
+    fn load_global(&mut self, symbol: Symbol, ty: Type) -> usize {
         let r = self.allocate_register();
+        let identifier = symbol.identifier.lexeme.unwrap();
         if ty == Type::U8 || ty == Type::Char {
             self.assembly.text.push_str(&format!(
                 "\tmovzbq\t{}, {}\n",
@@ -410,11 +436,77 @@ impl CodeGen {
         r
     }
 
-    fn store(&mut self, register: usize, identifier: String, ty: Type) {
+    fn store(&mut self, register: usize, symbol: Symbol, ty: Type) {
         let ty = match ty {
             Type::Array { ty, .. } => ty.pointer_to(),
             _ => ty,
         };
+        match symbol.class {
+            StorageClass::Local => self.store_local(register, symbol, ty),
+            StorageClass::Global => self.store_global(register, symbol, ty),
+        }
+    }
+
+    fn store_local(&mut self, register: usize, symbol: Symbol, ty: Type) {
+        let offset = symbol.offset.unwrap();
+
+        if ty == Type::U8 || ty == Type::Char {
+            self.assembly.text.push_str(&format!(
+                "\tmovb\t{}, {}(%rbp)\n",
+                BYTE_REGISTER_NAMES[register], offset
+            ));
+        } else if ty == Type::U16 {
+            self.assembly.text.push_str(&format!(
+                "\tmovw\t{}, {}(%rbp)\n",
+                WORD_REGISTER_NAMES[register], offset
+            ));
+        } else if ty == Type::U32 {
+            self.assembly.text.push_str(&format!(
+                "\tmovl\t{}, {}(%rbp)\n",
+                DWORD_REGISTER_NAMES[register], offset
+            ));
+        } else if ty == Type::U64
+            || ty == Type::PU8
+            || ty == Type::PU16
+            || ty == Type::PU32
+            || ty == Type::PU64
+        {
+            self.assembly.text.push_str(&format!(
+                "\tmovq\t{}, {}(%rbp)\n",
+                REGISTER_NAMES[register], offset
+            ));
+        } else if ty == Type::I8 {
+            self.assembly.text.push_str(&format!(
+                "\tmovb\t{}, {}(%rbp)\n",
+                BYTE_REGISTER_NAMES[register], offset
+            ));
+        } else if ty == Type::I16 {
+            self.assembly.text.push_str(&format!(
+                "\tmovw\t{}, {}(%rbp)\n",
+                WORD_REGISTER_NAMES[register], offset
+            ));
+        } else if ty == Type::I32 {
+            self.assembly.text.push_str(&format!(
+                "\tmovl\t{}, {}(%rbp)\n",
+                DWORD_REGISTER_NAMES[register], offset
+            ));
+        } else if ty == Type::I64
+            || ty == Type::PI8
+            || ty == Type::PI16
+            || ty == Type::PI32
+            || ty == Type::PI64
+        {
+            self.assembly.text.push_str(&format!(
+                "\tmovq\t{}, {}(%rbp)\n",
+                REGISTER_NAMES[register], offset
+            ));
+        } else {
+            panic!("Unexpected type {:?}", ty);
+        }
+    }
+
+    fn store_global(&mut self, register: usize, symbol: Symbol, ty: Type) {
+        let identifier = symbol.identifier.lexeme.unwrap();
         if ty == Type::U8 || ty == Type::Char {
             self.assembly.text.push_str(&format!(
                 "\tmovb\t{}, {}\n",
@@ -730,28 +822,46 @@ impl CodeGen {
         0
     }
 
-    fn function(&mut self, identifier: Token, body: Box<Node>) -> usize {
+    fn function(&mut self, identifier: Token, stack_size: usize, body: Box<Node>) -> usize {
         let fn_name = identifier.lexeme.unwrap();
-        self.function_preamble(fn_name.clone());
+        self.function_preamble(fn_name.clone(), stack_size);
         self.generate_node(*body);
-        self.function_postamble(fn_name.clone());
+        self.function_postamble(fn_name.clone(), stack_size);
         0
     }
 
-    fn function_preamble(&mut self, name: String) {
-        self.assembly.text.push_str("\t.global main\n");
+    fn function_preamble(&mut self, name: String, stack_size: usize) {
+        self.assembly
+            .text
+            .push_str(&format!("\t.global {}\n", name));
         self.assembly
             .text
             .push_str(&format!("\t.type\t{}, @function\n", name));
         self.assembly.text.push_str(&format!("{}:\n", name));
         self.assembly.text.push_str("\tpushq\t%rbp\n");
         self.assembly.text.push_str("\tmovq\t%rsp, %rbp\n");
+
+        // Align the stack pointer to be a multiple of 16
+        // less than its previous value
+        let stack_offset = (stack_size + 15) & !15;
+
+        self.assembly
+            .text
+            .push_str(&format!("\tsubq\t${}, %rsp\n", stack_offset));
     }
 
-    fn function_postamble(&mut self, fn_name: String) {
+    fn function_postamble(&mut self, fn_name: String, stack_size: usize) {
         self.assembly
             .text
             .push_str(format!("{}_end:\n", fn_name).as_str());
+
+        // Align the stack pointer to be a multiple of 16
+        // less than its previous value
+        let stack_offset = (stack_size + 15) & !15;
+
+        self.assembly
+            .text
+            .push_str(&format!("\taddq\t${}, %rsp\n", stack_offset));
         self.assembly.text.push_str(&format!("\tpopq\t%rbp\n"));
         self.assembly.text.push_str(&format!("\tret\n"));
     }
@@ -807,12 +917,25 @@ impl CodeGen {
         0
     }
 
-    fn address_of(&mut self, ident: String) -> usize {
+    fn address_of(&mut self, symbol: Symbol) -> usize {
         let r = self.allocate_register();
 
-        self.assembly
-            .text
-            .push_str(&format!("\tleaq\t{}(%rip), {}\n", ident, REGISTER_NAMES[r]));
+        match symbol.class {
+            StorageClass::Global => {
+                self.assembly.text.push_str(&format!(
+                    "\tleaq\t{}(%rip), {}\n",
+                    symbol.identifier.lexeme.unwrap(),
+                    REGISTER_NAMES[r]
+                ));
+            }
+            StorageClass::Local => {
+                let offset = symbol.offset.unwrap();
+                self.assembly.text.push_str(&format!(
+                    "\tleaq\t{}(%rbp), {}\n",
+                    offset, REGISTER_NAMES[r]
+                ));
+            }
+        }
 
         r
     }
@@ -901,29 +1024,60 @@ impl CodeGen {
         // should increment the value and return the old value
         let left = match *left.clone() {
             Node::LiteralExpr { value, .. } => match value {
-                LiteralValue::Identifier(i) => i,
+                LiteralValue::Identifier(s) => s,
                 _ => panic!("Unexpected token {:?}", left),
             },
             _ => panic!("Unexpected token {:?}", left),
         };
 
-        let r = self.allocate_register();
-        let r2 = self.allocate_register();
-        self.assembly
-            .text
-            .push_str(&format!("\tmovq\t{}, {}\n", left, REGISTER_NAMES[r]));
-        self.assembly.text.push_str(&format!(
-            "\tmovq\t{}, {}\n",
-            REGISTER_NAMES[r], REGISTER_NAMES[r2]
-        ));
-        self.assembly
-            .text
-            .push_str(&format!("\taddq\t$1, {}\n", REGISTER_NAMES[r]));
-        self.assembly
-            .text
-            .push_str(&format!("\tmovq\t{}, {}\n", REGISTER_NAMES[r], left));
-        self.free_register(r);
-        r2
+        match left.class {
+            StorageClass::Global => {
+                let left = left.identifier.lexeme.unwrap();
+                let r = self.allocate_register();
+                let r2 = self.allocate_register();
+                self.assembly
+                    .text
+                    .push_str(&format!("\tmovq\t{}, {}\n", left, REGISTER_NAMES[r]));
+                self.assembly.text.push_str(&format!(
+                    "\tmovq\t{}, {}\n",
+                    REGISTER_NAMES[r], REGISTER_NAMES[r2]
+                ));
+                self.assembly
+                    .text
+                    .push_str(&format!("\taddq\t$1, {}\n", REGISTER_NAMES[r]));
+                self.assembly
+                    .text
+                    .push_str(&format!("\tmovq\t{}, {}\n", REGISTER_NAMES[r], left));
+                self.free_register(r);
+                r2
+            }
+            StorageClass::Local => {
+                let offset = match left.offset {
+                    Some(s) => s,
+                    None => panic!("Symbol not found"),
+                };
+
+                let r = self.allocate_register();
+                let r2 = self.allocate_register();
+                self.assembly.text.push_str(&format!(
+                    "\tmovq\t{}(%rbp), {}\n",
+                    offset, REGISTER_NAMES[r]
+                ));
+                self.assembly.text.push_str(&format!(
+                    "\tmovq\t{}, {}\n",
+                    REGISTER_NAMES[r], REGISTER_NAMES[r2]
+                ));
+                self.assembly
+                    .text
+                    .push_str(&format!("\taddq\t$1, {}\n", REGISTER_NAMES[r]));
+                self.assembly.text.push_str(&format!(
+                    "\tmovq\t{}, {}(%rbp)\n",
+                    REGISTER_NAMES[r], offset
+                ));
+                self.free_register(r);
+                r2
+            }
+        }
     }
 
     fn post_dec_stmt(&mut self, left: Box<Node>) -> usize {
@@ -936,6 +1090,7 @@ impl CodeGen {
             _ => panic!("Unexpected token {:?}", left),
         };
 
+        let left = left.identifier.lexeme.unwrap();
         let r = self.allocate_register();
         let r2 = self.allocate_register();
         self.assembly
@@ -964,6 +1119,7 @@ impl CodeGen {
             _ => panic!("Unexpected token {:?}", right),
         };
 
+        let right = right.identifier.lexeme.unwrap();
         let r = self.allocate_register();
         self.assembly
             .text
@@ -986,6 +1142,7 @@ impl CodeGen {
             _ => panic!("Unexpected token {:?}", right),
         };
 
+        let right = right.identifier.lexeme.unwrap();
         let r = self.allocate_register();
         self.assembly
             .text
@@ -1041,5 +1198,142 @@ impl CodeGen {
             BYTE_REGISTER_NAMES[right_node], REGISTER_NAMES[right_node]
         ));
         right_node
+    }
+
+    fn load_local(&mut self, symbol: Symbol, ty: Type) -> usize {
+        let offset = match symbol.offset {
+            Some(s) => s,
+            None => panic!("Symbol not found"),
+        };
+
+        let r = self.allocate_register();
+        if ty == Type::U8 || ty == Type::Char {
+            self.assembly.text.push_str(&format!(
+                "\tmovzb\t{}(%rbp), {}\n",
+                offset, REGISTER_NAMES[r]
+            ));
+        } else if ty == Type::U16 {
+            self.assembly.text.push_str(&format!(
+                "\tmovzw\t{}(%rbp), {}\n",
+                offset, REGISTER_NAMES[r]
+            ));
+        } else if ty == Type::U32 {
+            self.assembly.text.push_str(&format!(
+                "\tmovl\t{}(%rbp), {}\n",
+                offset, DWORD_REGISTER_NAMES[r]
+            ));
+        } else if ty == Type::U64
+            || ty == Type::PU8
+            || ty == Type::PU16
+            || ty == Type::PU32
+            || ty == Type::PU64
+        {
+            self.assembly.text.push_str(&format!(
+                "\tmovq\t{}(%rbp), {}\n",
+                offset, REGISTER_NAMES[r]
+            ));
+        } else if ty == Type::I8 {
+            self.assembly.text.push_str(&format!(
+                "\tmovsbq\t{}(%rbp), {}\n",
+                offset, REGISTER_NAMES[r]
+            ));
+        } else if ty == Type::I16 {
+            self.assembly.text.push_str(&format!(
+                "\tmovsx\t{}(%rbp), {}\n",
+                offset, REGISTER_NAMES[r]
+            ));
+        } else if ty == Type::I32 {
+            self.assembly.text.push_str(&format!(
+                "\tmovl\t{}(%rbp), {}\n",
+                offset, DWORD_REGISTER_NAMES[r]
+            ));
+        } else if ty == Type::I64 {
+            self.assembly.text.push_str(&format!(
+                "\tmovq\t{}(%rbp), {}\n",
+                offset, REGISTER_NAMES[r]
+            ));
+        } else if let Type::Array { .. } = ty {
+            self.assembly.text.push_str(&format!(
+                "\tleaq\t{}(%rbp), {}\n",
+                offset, REGISTER_NAMES[r]
+            ));
+        } else {
+            panic!("Unexpected type {:?}", ty);
+        }
+
+        r
+    }
+
+    fn logical_and(&self, _left: usize, _right: usize, _ty: Type) -> usize {
+        todo!()
+    }
+
+    fn logical_or(&self, _left: usize, _right: usize, _ty: Type) -> usize {
+        todo!()
+    }
+
+    fn bitwise_and(&mut self, left: usize, right: usize, _ty: Type) -> usize {
+        self.assembly.text.push_str(&format!(
+            "\tandq\t{}, {}\n",
+            REGISTER_NAMES[left], REGISTER_NAMES[right]
+        ));
+        self.free_register(left);
+        right
+    }
+
+    fn bitwise_or(&mut self, left: usize, right: usize, _ty: Type) -> usize {
+        self.assembly.text.push_str(&format!(
+            "\torq\t{}, {}\n",
+            REGISTER_NAMES[left], REGISTER_NAMES[right]
+        ));
+        self.free_register(left);
+        right
+    }
+
+    fn bitwise_xor(&mut self, left: usize, right: usize, _ty: Type) -> usize {
+        self.assembly.text.push_str(&format!(
+            "\txorq\t{}, {}\n",
+            REGISTER_NAMES[left], REGISTER_NAMES[right]
+        ));
+        self.free_register(left);
+        right
+    }
+
+    fn shift_left(&mut self, left: usize, right: usize, ty: Type) -> usize {
+        let (c_register, mov, r) = match ty.size() {
+            1 => ("%cl", "mov", BYTE_REGISTER_NAMES[right]),
+            2 => ("%cx", "movw", WORD_REGISTER_NAMES[right]),
+            4 => ("%ecx", "movl", DWORD_REGISTER_NAMES[right]),
+            8 => ("%rcx", "movq", REGISTER_NAMES[right]),
+            _ => panic!("Unexpected type {:?}", ty),
+        };
+        self.assembly
+            .text
+            .push_str(&format!("\t{}\t {}, {}\n", mov, r, c_register));
+        self.assembly.text.push_str(&format!(
+            "\tsalq\t {}, {}\n",
+            c_register, REGISTER_NAMES[left]
+        ));
+        self.free_register(right);
+        left
+    }
+
+    fn shift_right(&mut self, left: usize, right: usize, ty: Type) -> usize {
+        let (c_register, mov, r) = match ty.size() {
+            1 => ("%cl", "mov", BYTE_REGISTER_NAMES[right]),
+            2 => ("%cx", "movw", WORD_REGISTER_NAMES[right]),
+            4 => ("%ecx", "movl", DWORD_REGISTER_NAMES[right]),
+            8 => ("%rcx", "movq", REGISTER_NAMES[right]),
+            _ => panic!("Unexpected type {:?}", ty),
+        };
+        self.assembly
+            .text
+            .push_str(&format!("\t{}\t {}, {}\n", mov, r, c_register));
+        self.assembly.text.push_str(&format!(
+            "\tsarq\t {}, {}\n",
+            c_register, REGISTER_NAMES[left]
+        ));
+        self.free_register(right);
+        left
     }
 }
