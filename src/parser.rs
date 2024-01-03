@@ -130,21 +130,21 @@ impl Parser {
 
     fn single_statement(&mut self) -> Node {
         if self.match_token(vec![TokenType::Let]) {
-            return self.var_decl(true);
+            self.var_decl(true)
         // } else if self.match_token(vec![TokenType::Identifier]) {
-        //     return self.assignment();
+        //     self.assignment()
         } else if self.match_token(vec![TokenType::If]) {
-            return self.if_statement();
+            self.if_statement()
         } else if self.match_token(vec![TokenType::While]) {
-            return self.while_statement();
+            self.while_statement()
         } else if self.match_token(vec![TokenType::For]) {
-            return self.for_statement();
+            self.for_statement()
         } else if self.match_token(vec![TokenType::Fn]) {
-            return self.fn_decl();
+            self.fn_decl()
         } else if self.match_token(vec![TokenType::Return]) {
-            return self.return_statement();
+            self.return_statement()
         } else {
-            return self.expression();
+            self.expression()
         }
     }
 
@@ -245,7 +245,6 @@ impl Parser {
                 class.clone(),
                 Some(ty.clone()),
                 None,
-                None,
                 offset,
             );
 
@@ -268,7 +267,6 @@ impl Parser {
                     SymbolType::Variable,
                     class.clone(),
                     Some(ty.clone()),
-                    None,
                     None,
                     offset,
                 ));
@@ -328,8 +326,7 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Node {
-        let node = self.logical_expr();
-        node
+        self.logical_expr()
     }
 
     fn logical_expr(&mut self) -> Node {
@@ -525,10 +522,10 @@ impl Parser {
 
             // ensure that the node is an identifier
             match &node {
-                Node::LiteralExpr { value, .. } => match value {
-                    LiteralValue::Identifier(_) => {}
-                    _ => panic!("Expected identifier"),
-                },
+                Node::LiteralExpr {
+                    value: LiteralValue::Identifier(_),
+                    ..
+                } => {}
                 _ => panic!("Expected identifier"),
             }
 
@@ -612,10 +609,10 @@ impl Parser {
 
             // ensure that the node is an identifier
             match &node {
-                Node::LiteralExpr { value, .. } => match value {
-                    LiteralValue::Identifier(_) => {}
-                    _ => panic!("Expected identifier"),
-                },
+                Node::LiteralExpr {
+                    value: LiteralValue::Identifier(_),
+                    ..
+                } => {}
                 _ => panic!("Expected identifier"),
             }
 
@@ -642,13 +639,11 @@ impl Parser {
                         );
                     }
                     return self.function_call();
-                } else {
-                    if symbol.structure != SymbolType::Variable {
-                        panic!(
-                            "Expected variable at line {} column {} got {:?}",
-                            identifier.line, identifier.column, symbol.structure
-                        );
-                    }
+                } else if symbol.structure != SymbolType::Variable {
+                    panic!(
+                        "Expected variable at line {} column {} got {:?}",
+                        identifier.line, identifier.column, symbol.structure
+                    );
                 }
 
                 let left = if self.match_token(vec![TokenType::LeftBracket]) {
@@ -681,20 +676,20 @@ impl Parser {
                     //     ),
                     // };
 
-                    return Node::AssignStmt {
+                    Node::AssignStmt {
                         left: Box::new(left),
                         expr: Box::new(expr),
-                    };
+                    }
                 } else if self.match_token(vec![TokenType::Inc]) {
-                    return Node::PostIncStmt {
+                    Node::PostIncStmt {
                         left: Box::new(left),
-                    };
+                    }
                 } else if self.match_token(vec![TokenType::Dec]) {
-                    return Node::PostDecStmt {
+                    Node::PostDecStmt {
                         left: Box::new(left),
-                    };
+                    }
                 } else {
-                    return left;
+                    left
                 }
             }
             None => panic!(
@@ -725,7 +720,7 @@ impl Parser {
             } else {
                 (LiteralValue::U64(val), Type::U64)
             };
-            return Node::LiteralExpr { value, ty: ty };
+            return Node::LiteralExpr { value, ty };
         } else if self.match_token(vec![TokenType::Identifier]) {
             return self.postfix();
         } else if self.match_token(vec![TokenType::String]) {
@@ -813,7 +808,6 @@ impl Parser {
         class: StorageClass,
         ty: Option<Type>,
         end_label: Option<String>,
-        size: Option<usize>,
         offset: Option<isize>,
     ) -> Symbol {
         let symbol = self.find_symbol(identifier.clone());
@@ -830,9 +824,9 @@ impl Parser {
             identifier,
             structure,
             class,
-            ty: ty,
+            ty,
             end_label,
-            size,
+            size: None,
             offset,
         };
 
@@ -984,7 +978,6 @@ impl Parser {
             ty.clone(),
             end_label,
             None,
-            None,
         );
         self.current_fn = Some(symbol.clone());
         self.reset_offset();
@@ -993,7 +986,7 @@ impl Parser {
         if ty.is_some() {
             match &body {
                 Node::CompoundStmt { statements } => {
-                    if statements.len() == 0 {
+                    if statements.is_empty() {
                         panic!(
                             "Function {} does not return a value at line {} column {}",
                             identifier.lexeme.clone().unwrap(),
@@ -1055,26 +1048,22 @@ impl Parser {
             }
         }
 
-        if left_type.is_ptr() {
-            if op.is_none() && left_type == right_type {
-                return Some(node);
-            }
+        if left_type.is_ptr() && op.is_none() && left_type == right_type {
+            return Some(node);
         }
 
         // We can scale only on A_ADD or A_SUBTRACT operation
-        if let Some(op) = op {
-            if op == TokenType::Add || op == TokenType::Sub {
-                if left_type.is_int() && right_type.is_ptr() {
-                    let right_size = right_type.value_at().size();
-                    if right_size > 1 {
-                        return Some(Node::ScaleExpr {
-                            right: Box::new(node),
-                            size: right_size,
-                            ty: right_type,
-                        });
-                    } else {
-                        return Some(node);
-                    }
+        if op.is_some() && (op == Some(TokenType::Add) || op == Some(TokenType::Sub)) {
+            if left_type.is_int() && right_type.is_ptr() {
+                let right_size = right_type.value_at().size();
+                if right_size > 1 {
+                    return Some(Node::ScaleExpr {
+                        right: Box::new(node),
+                        size: right_size,
+                        ty: right_type,
+                    });
+                } else {
+                    return Some(node);
                 }
             }
         }
@@ -1121,7 +1110,7 @@ impl Parser {
 
         let fn_sym = self.current_fn.clone().unwrap();
 
-        if !fn_sym.ty.is_some() {
+        if fn_sym.ty.is_none() {
             panic!(
                 "Function {} has no return type",
                 fn_sym.identifier.lexeme.clone().unwrap()

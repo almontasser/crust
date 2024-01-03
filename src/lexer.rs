@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::utils::RNG;
+use crate::utils::RandomGenerator;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
@@ -89,7 +89,7 @@ pub struct Lexer {
     column: usize,
     keywords: HashMap<String, TokenType>,
     string_labels: Vec<String>,
-    rng: RNG,
+    rng: RandomGenerator,
 }
 
 impl Lexer {
@@ -122,7 +122,7 @@ impl Lexer {
                 keywords
             },
             string_labels: Vec::new(),
-            rng: RNG::new(),
+            rng: RandomGenerator::new(),
         }
     }
 
@@ -259,7 +259,7 @@ impl Lexer {
     fn add_token_literal(&mut self, token_type: TokenType, none: Option<Literal>) {
         let text = &self.source[self.start..self.current];
         self.tokens.push(Token {
-            token_type: token_type,
+            token_type,
             lexeme: Some(text.to_string()),
             line: self.line,
             column: self.column,

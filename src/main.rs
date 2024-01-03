@@ -184,18 +184,17 @@ const DEBUG: bool = false;
 const DEBUG_TEST_FILE: &str = "tests/test24";
 
 fn main() {
-    let source: String;
-    if !DEBUG {
+    let source = if !DEBUG {
         let args: Vec<String> = std::env::args().collect();
         if args.len() != 2 {
             println!("Usage: crust <source>");
             std::process::exit(1);
         }
 
-        source = std::fs::read_to_string(&args[1]).expect("Failed to read file");
+        std::fs::read_to_string(&args[1]).expect("Failed to read file")
     } else {
-        source = std::fs::read_to_string(DEBUG_TEST_FILE).expect("Failed to read file");
-    }
+        std::fs::read_to_string(DEBUG_TEST_FILE).expect("Failed to read file")
+    };
 
     let mut lexer = lexer::Lexer::new(source);
     let tokens = lexer.scan_tokens();

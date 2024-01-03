@@ -179,15 +179,15 @@ impl CodeGen {
             Node::AssignStmt { left, expr } => {
                 self.assignment_depth += 1;
                 let r = match *left.clone() {
-                    Node::LiteralExpr { value, .. } => match value {
-                        LiteralValue::Identifier(s) => {
-                            let register = self.generate_node(*expr.clone());
-                            self.store(register, s, expr.ty().unwrap());
-                            self.assignment_depth -= 1;
-                            register
-                        }
-                        _ => panic!("Unexpected token {:?}", left),
-                    },
+                    Node::LiteralExpr {
+                        value: LiteralValue::Identifier(s),
+                        ..
+                    } => {
+                        let register = self.generate_node(*expr.clone());
+                        self.store(register, s, expr.ty().unwrap());
+                        self.assignment_depth -= 1;
+                        register
+                    }
                     Node::UnaryExpr {
                         operator,
                         right,
@@ -1023,10 +1023,10 @@ impl CodeGen {
     fn post_inc_stmt(&mut self, left: Box<Node>) -> usize {
         // should increment the value and return the old value
         let left = match *left.clone() {
-            Node::LiteralExpr { value, .. } => match value {
-                LiteralValue::Identifier(s) => s,
-                _ => panic!("Unexpected token {:?}", left),
-            },
+            Node::LiteralExpr {
+                value: LiteralValue::Identifier(s),
+                ..
+            } => s,
             _ => panic!("Unexpected token {:?}", left),
         };
 
@@ -1083,10 +1083,10 @@ impl CodeGen {
     fn post_dec_stmt(&mut self, left: Box<Node>) -> usize {
         // should decrement the value and return the old value
         let left = match *left.clone() {
-            Node::LiteralExpr { value, .. } => match value {
-                LiteralValue::Identifier(i) => i,
-                _ => panic!("Unexpected token {:?}", left),
-            },
+            Node::LiteralExpr {
+                value: LiteralValue::Identifier(i),
+                ..
+            } => i,
             _ => panic!("Unexpected token {:?}", left),
         };
 
@@ -1112,10 +1112,10 @@ impl CodeGen {
 
     fn pre_inc_stmt(&mut self, right: Box<Node>) -> usize {
         let right = match *right.clone() {
-            Node::LiteralExpr { value, .. } => match value {
-                LiteralValue::Identifier(i) => i,
-                _ => panic!("Unexpected token {:?}", right),
-            },
+            Node::LiteralExpr {
+                value: LiteralValue::Identifier(i),
+                ..
+            } => i,
             _ => panic!("Unexpected token {:?}", right),
         };
 
@@ -1135,10 +1135,10 @@ impl CodeGen {
 
     fn pre_dec_stmt(&mut self, right: Box<Node>) -> usize {
         let right = match *right.clone() {
-            Node::LiteralExpr { value, .. } => match value {
-                LiteralValue::Identifier(i) => i,
-                _ => panic!("Unexpected token {:?}", right),
-            },
+            Node::LiteralExpr {
+                value: LiteralValue::Identifier(i),
+                ..
+            } => i,
             _ => panic!("Unexpected token {:?}", right),
         };
 

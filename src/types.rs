@@ -71,31 +71,31 @@ impl Type {
     }
 
     pub fn is_int(&self) -> bool {
-        match self {
+        matches!(
+            self,
             Type::U8
-            | Type::U16
-            | Type::U32
-            | Type::U64
-            | Type::I8
-            | Type::I16
-            | Type::I32
-            | Type::I64
-            | Type::Char => true,
-            _ => false,
-        }
+                | Type::U16
+                | Type::U32
+                | Type::U64
+                | Type::I8
+                | Type::I16
+                | Type::I32
+                | Type::I64
+                | Type::Char
+        )
     }
 
     pub fn is_ptr(&self) -> bool {
-        match self {
+        matches!(
+            self,
             Type::PU8
-            | Type::PU16
-            | Type::PU32
-            | Type::PU64
-            | Type::PI8
-            | Type::PI16
-            | Type::PI32
-            | Type::PI64 => true,
-            _ => false,
-        }
+                | Type::PU16
+                | Type::PU32
+                | Type::PU64
+                | Type::PI8
+                | Type::PI16
+                | Type::PI32
+                | Type::PI64
+        )
     }
 }

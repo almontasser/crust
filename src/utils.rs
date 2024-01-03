@@ -1,18 +1,18 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub struct RNG {
+pub struct RandomGenerator {
     x: u64,
     y: u64,
     w: u64,
     z: u64,
 }
 
-impl RNG {
-    pub fn new() -> RNG {
+impl RandomGenerator {
+    pub fn new() -> RandomGenerator {
         // get current time
         let now = SystemTime::now();
         let seed = now.duration_since(UNIX_EPOCH).unwrap().as_secs();
-        RNG {
+        RandomGenerator {
             x: 123456789 ^ seed,
             y: 362436069 ^ seed,
             w: 886754123 ^ seed,
