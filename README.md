@@ -31,6 +31,7 @@ Heavily inspired by https://github.com/DoctorWkt/acwj
 - [ ] Static
 - [ ] Struct Methods
 - [ ] Struct Traits
+- [ ] LLVM
 
 ## How to use
 
