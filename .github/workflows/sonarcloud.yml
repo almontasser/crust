@@ -35,7 +35,7 @@ jobs:
         run: |
             cargo install cargo-sonar
             cargo clippy --message-format json > my-clippy-report.json
-            cargo sonar clippy --clippy-path my-clippy-report.json
+            cargo sonar --clippy --clippy-path my-clippy-report.json
 
       - name: Build with coverage
         run: |
