@@ -1,3 +1,6 @@
+
+![Crust](https://github.com/almontasser/crust/assets/19656179/6ac3df79-264b-464b-a180-11d1870445c8)
+
 # CRUST
 
 This is a hobby project to learn about compilers and language design. I've designed the language to be similar to C and Rust.
