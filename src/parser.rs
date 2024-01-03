@@ -594,10 +594,10 @@ impl Parser {
 
             // ensure that the node is an identifier
             match &node {
-                Node::LiteralExpr { value, .. } => match value {
-                    LiteralValue::Identifier(_) => {}
-                    _ => panic!("Expected identifier"),
-                },
+                Node::LiteralExpr {
+                    value: LiteralValue::Identifier(_),
+                    ..
+                } => {}
                 _ => panic!("Expected identifier"),
             }
 
@@ -1053,18 +1053,20 @@ impl Parser {
         }
 
         // We can scale only on A_ADD or A_SUBTRACT operation
-        if op.is_some() && (op == Some(TokenType::Add) || op == Some(TokenType::Sub)) {
-            if left_type.is_int() && right_type.is_ptr() {
-                let right_size = right_type.value_at().size();
-                if right_size > 1 {
-                    return Some(Node::ScaleExpr {
-                        right: Box::new(node),
-                        size: right_size,
-                        ty: right_type,
-                    });
-                } else {
-                    return Some(node);
-                }
+        if op.is_some()
+            && (op == Some(TokenType::Add) || op == Some(TokenType::Sub))
+            && left_type.is_int()
+            && right_type.is_ptr()
+        {
+            let right_size = right_type.value_at().size();
+            if right_size > 1 {
+                return Some(Node::ScaleExpr {
+                    right: Box::new(node),
+                    size: right_size,
+                    ty: right_type,
+                });
+            } else {
+                return Some(node);
             }
         }
 
