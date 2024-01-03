@@ -100,7 +100,7 @@ impl Parser {
     }
 
     fn is_at_end(&self) -> bool {
-        self.peek().token_type == TokenType::EOF
+        self.peek().token_type == TokenType::Eof
     }
 
     fn compound_statement(&mut self) -> Node {

@@ -63,7 +63,7 @@ impl CodeGen {
                 LiteralValue::U8(u) => self.load(u as u64, ty),
                 LiteralValue::U16(u) => self.load(u as u64, ty),
                 LiteralValue::U32(u) => self.load(u as u64, ty),
-                LiteralValue::U64(u) => self.load(u as u64, ty),
+                LiteralValue::U64(u) => self.load(u, ty),
                 LiteralValue::Identifier(s) => match s.class {
                     StorageClass::Local => self.load_local(s, ty),
                     StorageClass::Global => self.load_global(s, ty),
@@ -116,10 +116,10 @@ impl CodeGen {
                     TokenType::Ampersand => {
                         // get identifier
                         let symbol = match &*right {
-                            Node::LiteralExpr { value, .. } => match value {
-                                LiteralValue::Identifier(s) => s,
-                                _ => panic!("Unexpected token {:?}", right),
-                            },
+                            Node::LiteralExpr {
+                                value: LiteralValue::Identifier(s),
+                                ..
+                            } => s,
                             _ => panic!("Unexpected token {:?}", right),
                         };
 
@@ -247,7 +247,7 @@ impl CodeGen {
             Node::PostDecStmt { left } => self.post_dec_stmt(left),
             Node::PreIncStmt { right } => self.pre_inc_stmt(right),
             Node::PreDecStmt { right } => self.pre_dec_stmt(right),
-            Node::ToBool { expr } => self.to_bool(expr),
+            Node::ToBool { expr } => self.expr_to_bool(expr),
         }
     }
 
@@ -862,8 +862,8 @@ impl CodeGen {
         self.assembly
             .text
             .push_str(&format!("\taddq\t${}, %rsp\n", stack_offset));
-        self.assembly.text.push_str(&format!("\tpopq\t%rbp\n"));
-        self.assembly.text.push_str(&format!("\tret\n"));
+        self.assembly.text.push_str("\tpopq\t%rbp\n");
+        self.assembly.text.push_str("\tret\n");
     }
 
     fn function_call(&mut self, identifier: crate::lexer::Token, expr: Box<Node>) -> usize {
@@ -1156,7 +1156,7 @@ impl CodeGen {
         r
     }
 
-    fn to_bool(&mut self, expr: Box<Node>) -> usize {
+    fn expr_to_bool(&mut self, expr: Box<Node>) -> usize {
         let r = self.generate_node(*expr);
         self.assembly
             .text

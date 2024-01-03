@@ -77,7 +77,7 @@ pub enum TokenType {
     Inc,
     Dec,
 
-    EOF,
+    Eof,
 }
 
 pub struct Lexer {
@@ -133,7 +133,7 @@ impl Lexer {
         }
 
         self.tokens.push(Token {
-            token_type: TokenType::EOF,
+            token_type: TokenType::Eof,
             lexeme: None,
             line: self.line,
             column: self.column,
@@ -239,7 +239,7 @@ impl Lexer {
             }
             '\'' => self.character(),
             '"' => self.string(),
-            c if c.is_digit(10) => self.number(),
+            c if c.is_ascii_digit() => self.number(),
             c if c.is_alphabetic() || c == '_' => self.identifier(),
             _ => panic!("Unexpected character: {}", c),
         }
@@ -268,7 +268,7 @@ impl Lexer {
     }
 
     fn number(&mut self) {
-        while self.peek().is_digit(10) {
+        while self.peek().is_ascii_digit() {
             self.advance();
         }
 
