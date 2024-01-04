@@ -27,7 +27,7 @@ Heavily inspired by https://github.com/DoctorWkt/acwj
 - [ ] Function Parameters
 - [ ] Unions
 - [ ] Enums
-- [ ] Breakk & Continue
+- [ ] Break & Continue
 - [ ] Variable Initialization
 - [ ] Casting
 - [ ] Sizeof
