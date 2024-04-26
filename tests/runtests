@@ -13,7 +13,7 @@ do if [ ! -f "out.$i" ]
      echo -n $i
      ../target/debug/crust $i
     #  nasm -f elf64 out.s
-     cc -no-pie -o out out.s
+     cc -no-pie -z noexecstack -o out out.s
      ./out > trial.$i
      cmp -s "out.$i" "trial.$i"
      if [ "$?" -eq "1" ]

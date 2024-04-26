@@ -184,7 +184,7 @@ impl CodeGen {
                         ..
                     } => {
                         let register = self.generate_node(*expr.clone());
-                        self.store(register, s, expr.ty().unwrap());
+                        self.store(register, s.clone(), s.ty.unwrap());
                         self.assignment_depth -= 1;
                         register
                     }
