@@ -120,23 +120,29 @@ impl Parser {
     pub fn parse(&mut self) -> &Vec<Node> {
         // first pass
         while !self.is_at_end() {
-            if self.check(TokenType::Fn) {
+            if self.match_token(vec![TokenType::Let]) {
+                let node = self.var_decl(false);
+                self.expect(vec![TokenType::SemiColon]).unwrap();
+                self.nodes.push(node);
+            } else if self.check(TokenType::Fn) {
                 self.fn_decl(true);
             } else {
                 self.advance();
             }
         }
+
+        // second pass
         self.current = 0;
-
         while !self.is_at_end() {
-            let node = if self.match_token(vec![TokenType::Let]) {
-                let node = self.var_decl(false);
-                self.expect(vec![TokenType::SemiColon]).unwrap();
-                node
-            } else {
-                self.fn_decl(false).unwrap()
-            };
+            // skip global variables since we already parsed it in the first pass
+            if self.match_token(vec![TokenType::Let]) {
+                while !self.match_token(vec![TokenType::SemiColon]) {
+                    self.advance();
+                }
+                continue;
+            }
 
+            let node = self.fn_decl(false).unwrap();
             self.nodes.push(node);
         }
 
