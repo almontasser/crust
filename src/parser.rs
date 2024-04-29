@@ -602,7 +602,7 @@ impl Parser {
                     _ => panic!("Expected identifier"),
                 },
                 Node::UnaryExpr { operator, .. } => {
-                    if operator.token_type != TokenType::Ampersand {
+                    if operator.token_type != TokenType::Mul {
                         panic!("Expected identifier");
                     }
                 }

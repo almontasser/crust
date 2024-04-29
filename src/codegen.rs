@@ -409,16 +409,7 @@ impl CodeGen {
                 "\tmov\t{}, {}\n",
                 identifier, DWORD_REGISTER_NAMES[r]
             ));
-        } else if ty == Type::U64
-            || ty == Type::PU8
-            || ty == Type::PU16
-            || ty == Type::PU32
-            || ty == Type::PU64
-            || ty == Type::PI8
-            || ty == Type::PI16
-            || ty == Type::PI32
-            || ty == Type::PI64
-        {
+        } else if ty == Type::U64 || matches!(ty, Type::Pointer { .. }) {
             self.assembly
                 .text
                 .push_str(&format!("\tmovq\t{}, {}\n", identifier, REGISTER_NAMES[r]));
@@ -480,12 +471,7 @@ impl CodeGen {
                 "\tmovl\t{}, {}(%rbp)\n",
                 DWORD_REGISTER_NAMES[register], offset
             ));
-        } else if ty == Type::U64
-            || ty == Type::PU8
-            || ty == Type::PU16
-            || ty == Type::PU32
-            || ty == Type::PU64
-        {
+        } else if ty == Type::U64 || matches!(ty, Type::Pointer { .. }) {
             self.assembly.text.push_str(&format!(
                 "\tmovq\t{}, {}(%rbp)\n",
                 REGISTER_NAMES[register], offset
@@ -505,12 +491,7 @@ impl CodeGen {
                 "\tmovl\t{}, {}(%rbp)\n",
                 DWORD_REGISTER_NAMES[register], offset
             ));
-        } else if ty == Type::I64
-            || ty == Type::PI8
-            || ty == Type::PI16
-            || ty == Type::PI32
-            || ty == Type::PI64
-        {
+        } else if ty == Type::I64 || matches!(ty, Type::Pointer { .. }) {
             self.assembly.text.push_str(&format!(
                 "\tmovq\t{}, {}(%rbp)\n",
                 REGISTER_NAMES[register], offset
@@ -537,12 +518,7 @@ impl CodeGen {
                 "\tmovl\t{}, {}\n",
                 DWORD_REGISTER_NAMES[register], identifier
             ));
-        } else if ty == Type::U64
-            || ty == Type::PU8
-            || ty == Type::PU16
-            || ty == Type::PU32
-            || ty == Type::PU64
-        {
+        } else if ty == Type::U64 || matches!(ty, Type::Pointer { .. }) {
             self.assembly.text.push_str(&format!(
                 "\tmovq\t{}, {}\n",
                 REGISTER_NAMES[register], identifier
@@ -562,12 +538,7 @@ impl CodeGen {
                 "\tmovl\t{}, {}\n",
                 DWORD_REGISTER_NAMES[register], identifier
             ));
-        } else if ty == Type::I64
-            || ty == Type::PI8
-            || ty == Type::PI16
-            || ty == Type::PI32
-            || ty == Type::PI64
-        {
+        } else if ty == Type::I64 || matches!(ty, Type::Pointer { .. }) {
             self.assembly.text.push_str(&format!(
                 "\tmovq\t{}, {}\n",
                 REGISTER_NAMES[register], identifier
@@ -945,7 +916,7 @@ impl CodeGen {
                     DWORD_REGISTER_NAMES[register]
                 ));
             }
-            Type::U64 | Type::PU8 | Type::PU16 | Type::PU32 | Type::PU64 => {
+            Type::U64 | Type::Pointer { .. } => {
                 self.assembly
                     .text
                     .push_str(&format!("\tmovq\t{}, %rax\n", REGISTER_NAMES[register]));
@@ -988,22 +959,34 @@ impl CodeGen {
             _ => ty,
         };
         match ty {
-            Type::PU8 => self.assembly.text.push_str(&format!(
-                "\tmovzbq\t({}), {}\n",
-                REGISTER_NAMES[register], REGISTER_NAMES[register]
-            )),
-            Type::PU16 => self.assembly.text.push_str(&format!(
-                "\tmovzx\t({}), {}\n",
-                REGISTER_NAMES[register], REGISTER_NAMES[register]
-            )),
-            Type::PU32 => self.assembly.text.push_str(&format!(
-                "\tmovq\t({}), {}\n",
-                REGISTER_NAMES[register], REGISTER_NAMES[register]
-            )),
-            Type::PU64 => self.assembly.text.push_str(&format!(
-                "\tmovq\t({}), {}\n",
-                REGISTER_NAMES[register], REGISTER_NAMES[register]
-            )),
+            Type::Pointer { ty, count } => {
+                if count > 1 {
+                    self.assembly.text.push_str(&format!(
+                        "\tmovq\t({}), {}\n",
+                        REGISTER_NAMES[register], REGISTER_NAMES[register]
+                    ));
+                } else {
+                    match *ty {
+                        Type::U8 | Type::Char => self.assembly.text.push_str(&format!(
+                            "\tmovzbq\t({}), {}\n",
+                            REGISTER_NAMES[register], REGISTER_NAMES[register]
+                        )),
+                        Type::U16 => self.assembly.text.push_str(&format!(
+                            "\tmovzx\t({}), {}\n",
+                            REGISTER_NAMES[register], REGISTER_NAMES[register]
+                        )),
+                        Type::U32 => self.assembly.text.push_str(&format!(
+                            "\tmovq\t({}), {}\n",
+                            REGISTER_NAMES[register], REGISTER_NAMES[register]
+                        )),
+                        Type::U64 => self.assembly.text.push_str(&format!(
+                            "\tmovq\t({}), {}\n",
+                            REGISTER_NAMES[register], REGISTER_NAMES[register]
+                        )),
+                        _ => panic!("Unexpected type {:?}", ty),
+                    }
+                }
+            }
             _ => panic!("Unexpected type {:?}", ty),
         }
 
@@ -1024,20 +1007,20 @@ impl CodeGen {
             _ => ty,
         };
 
-        match ty {
-            Type::PU8 => self.assembly.text.push_str(&format!(
+        match ty.value_at() {
+            Type::U8 => self.assembly.text.push_str(&format!(
                 "\tmovb\t{}, ({})\n",
                 BYTE_REGISTER_NAMES[expr_node], REGISTER_NAMES[right_node]
             )),
-            Type::PU16 => self.assembly.text.push_str(&format!(
+            Type::U16 => self.assembly.text.push_str(&format!(
                 "\tmovw\t{}, ({})\n",
                 WORD_REGISTER_NAMES[expr_node], REGISTER_NAMES[right_node]
             )),
-            Type::PU32 => self.assembly.text.push_str(&format!(
+            Type::U32 => self.assembly.text.push_str(&format!(
                 "\tmovl\t{}, ({})\n",
                 DWORD_REGISTER_NAMES[expr_node], REGISTER_NAMES[right_node]
             )),
-            Type::PU64 => self.assembly.text.push_str(&format!(
+            Type::U64 => self.assembly.text.push_str(&format!(
                 "\tmovq\t{}, ({})\n",
                 REGISTER_NAMES[expr_node], REGISTER_NAMES[right_node]
             )),
@@ -1264,12 +1247,7 @@ impl CodeGen {
                 "\tmovl\t{}(%rbp), {}\n",
                 offset, DWORD_REGISTER_NAMES[r]
             ));
-        } else if ty == Type::U64
-            || ty == Type::PU8
-            || ty == Type::PU16
-            || ty == Type::PU32
-            || ty == Type::PU64
-        {
+        } else if ty == Type::U64 || matches!(ty, Type::Pointer { .. }) {
             self.assembly.text.push_str(&format!(
                 "\tmovq\t{}(%rbp), {}\n",
                 offset, REGISTER_NAMES[r]
