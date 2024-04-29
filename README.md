@@ -22,6 +22,7 @@ Heavily inspired by https://github.com/DoctorWkt/acwj
 - [x] Function Parameters
 - [x] Function Arguments
 - [x] Local Variables (Scopes)
+- [x] Function Hoisting
 - [ ] Reading from console
 - [ ] Dynamic Arrays
 - [ ] Structs

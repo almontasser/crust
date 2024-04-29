@@ -118,13 +118,23 @@ impl Parser {
     }
 
     pub fn parse(&mut self) -> &Vec<Node> {
+        // first pass
+        while !self.is_at_end() {
+            if self.check(TokenType::Fn) {
+                self.fn_decl(true);
+            } else {
+                self.advance();
+            }
+        }
+        self.current = 0;
+
         while !self.is_at_end() {
             let node = if self.match_token(vec![TokenType::Let]) {
                 let node = self.var_decl(false);
                 self.expect(vec![TokenType::SemiColon]).unwrap();
                 node
             } else {
-                self.fn_decl()
+                self.fn_decl(false).unwrap()
             };
 
             self.nodes.push(node);
@@ -174,7 +184,7 @@ impl Parser {
         } else if self.match_token(vec![TokenType::For]) {
             self.for_statement()
         } else if self.match_token(vec![TokenType::Fn]) {
-            self.fn_decl()
+            self.fn_decl(false).unwrap()
         } else if self.match_token(vec![TokenType::Return]) {
             self.return_statement()
         } else {
@@ -849,8 +859,15 @@ impl Parser {
     ) -> Symbol {
         let symbol = self.find_symbol(identifier.clone());
         if symbol.is_some() {
+            let ty = if symbol.unwrap().structure == SymbolType::Variable {
+                "Variable"
+            } else {
+                "Function"
+            };
+
             panic!(
-                "Variable {} already declared at line {} column {}",
+                "{} {} already declared at line {} column {}",
+                ty,
                 identifier.lexeme.clone().unwrap(),
                 identifier.line,
                 identifier.column
@@ -997,30 +1014,48 @@ impl Parser {
         body
     }
 
-    fn fn_decl(&mut self) -> Node {
+    fn fn_decl(&mut self, first_pass: bool) -> Option<Node> {
         self.expect(vec![TokenType::Fn]).unwrap();
         let identifier = self.expect(vec![TokenType::Identifier]).unwrap();
-        let end_label = Some(format!("{}{}", identifier.lexeme.clone().unwrap(), "_end"));
         self.expect(vec![TokenType::LeftParen]).unwrap();
-        // TODO: parse parameters
         self.reset_offset();
-        let params = self.parse_params();
+        let params = self.parse_params(first_pass);
         self.expect(vec![TokenType::RightParen]).unwrap();
-
         let mut ty: Option<Type> = None;
+
         if self.match_token(vec![TokenType::Colon]) {
             ty = Some(self.parse_type());
         }
-        let symbol = self.add_symbol(
-            identifier.clone(),
-            SymbolType::Function,
-            StorageClass::Global,
-            ty.clone(),
-            end_label,
-            None,
-            Some(params.clone()),
-        );
-        self.current_fn = Some(symbol.clone());
+
+        if first_pass {
+            let end_label = Some(format!("{}{}", identifier.lexeme.clone().unwrap(), "_end"));
+
+            self.add_symbol(
+                identifier.clone(),
+                SymbolType::Function,
+                StorageClass::Global,
+                ty.clone(),
+                end_label,
+                None,
+                Some(params.clone()),
+            );
+
+            // Skip the body
+            self.advance();
+            let mut braces = 1;
+            while braces != 0 {
+                if self.check(TokenType::LeftBrace) {
+                    braces += 1;
+                } else if self.check(TokenType::RightBrace) {
+                    braces -= 1;
+                }
+                self.advance();
+            }
+
+            return None;
+        }
+
+        self.current_fn = self.find_symbol(identifier.clone());
         let body = self.compound_statement();
         // delete local variables and
         self.symbols
@@ -1060,13 +1095,13 @@ impl Parser {
 
         self.current_fn = None;
 
-        Node::FnDecl {
+        Some(Node::FnDecl {
             identifier,
             body: Box::new(body),
             stack_size: self.local_offset,
             return_type: ty,
             params,
-        }
+        })
     }
 
     fn modify_type(&self, node: Node, right_type: Type, op: Option<TokenType>) -> Option<Node> {
@@ -1271,7 +1306,7 @@ impl Parser {
         self.local_offset = 0;
     }
 
-    fn parse_params(&mut self) -> Vec<Symbol> {
+    fn parse_params(&mut self, first_pass: bool) -> Vec<Symbol> {
         let mut params = Vec::new();
 
         let mut i = 0;
@@ -1287,17 +1322,32 @@ impl Parser {
                 offset = local_offset;
                 local_offset += 8;
             }
-            let symbol = self.add_symbol(
-                identifier.clone(),
-                SymbolType::Variable,
-                StorageClass::Param,
-                Some(ty.clone()),
-                None,
-                Some(offset),
-                None,
-            );
+            if !first_pass {
+                // TODO: Merge it with the bellow symbol, make single creation of a symbol
+                self.add_symbol(
+                    identifier.clone(),
+                    SymbolType::Variable,
+                    StorageClass::Param,
+                    Some(ty.clone()),
+                    None,
+                    Some(offset),
+                    None,
+                );
+            }
+
+            let symbol = Symbol {
+                identifier,
+                structure: SymbolType::Variable,
+                class: StorageClass::Param,
+                ty: Some(ty.clone()),
+                end_label: None,
+                size: None,
+                offset: Some(offset),
+                params: None,
+            };
 
             params.push(symbol);
+
             if !self.match_token(vec![TokenType::Comma]) {
                 break;
             }
