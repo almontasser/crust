@@ -23,7 +23,7 @@ impl Assembly {
 pub struct CodeGen {
     nodes: Vec<Node>,
     assembly: Assembly,
-    registers: [bool; 4],
+    registers: [bool; 10],
     label_count: usize,
     assignment_depth: usize,
     local_offset: isize,
@@ -50,7 +50,7 @@ impl CodeGen {
         Self {
             nodes,
             assembly: Assembly::new(),
-            registers: [false; 4],
+            registers: [false; 10],
             label_count: 0,
             assignment_depth: 0,
             local_offset: 0,
@@ -251,10 +251,10 @@ impl CodeGen {
                 ..
             } => self.function(identifier, params, stack_size, body),
             Node::FnCall {
-                identifier, expr, ..
+                identifier, args, ..
             } => {
                 // TODO: fix ths hack
-                let r = self.function_call(identifier.clone(), expr);
+                let r = self.function_call(identifier.clone(), args);
                 if identifier.lexeme.unwrap() == "printint" {
                     self.free_register(r);
                     0
@@ -916,21 +916,33 @@ impl CodeGen {
             .push_str(&format!("\taddq\t${}, %rsp\n", self.stack_offset));
         self.assembly.text.push_str("\tpopq\t%rbp\n");
         self.assembly.text.push_str("\tret\n");
+
+        self.local_offset = 0;
+        self.stack_offset = 0;
     }
 
-    fn function_call(&mut self, identifier: crate::lexer::Token, expr: Box<Node>) -> usize {
-        let register = self.generate_node(*expr);
+    fn function_call(&mut self, identifier: crate::lexer::Token, args: Vec<Node>) -> usize {
         let out_register = self.allocate_register();
-        self.assembly
-            .text
-            .push_str(&format!("\tmovq\t{}, %rdi\n", REGISTER_NAMES[register]));
+
+        for (i, arg) in args.iter().enumerate() {
+            let register = self.generate_node(arg.clone());
+            self.copy_arg(register, i);
+            self.free_register(register);
+        }
+
         self.assembly
             .text
             .push_str(&format!("\tcall\t{}\n", identifier.lexeme.unwrap()));
+
+        if args.len() > 6 {
+            self.assembly
+                .text
+                .push_str(&format!("\taddq\t${}, %rsp\n", 8 * (args.len() - 6)));
+        }
+
         self.assembly
             .text
             .push_str(&format!("\tmovq\t%rax, {}\n", REGISTER_NAMES[out_register]));
-        self.free_register(register);
         out_register
     }
 
@@ -1399,5 +1411,19 @@ impl CodeGen {
         }
 
         -self.local_offset
+    }
+
+    fn copy_arg(&mut self, register: usize, arg_pos: usize) {
+        if arg_pos > 6 {
+            self.assembly
+                .text
+                .push_str(&format!("\tpushq\t{}\n", REGISTER_NAMES[register]));
+        } else {
+            self.assembly.text.push_str(&format!(
+                "\tmovq\t{}, {}\n",
+                REGISTER_NAMES[register],
+                REGISTER_NAMES[(FIRST_PARAM_REG - (arg_pos as isize)) as usize]
+            ));
+        }
     }
 }

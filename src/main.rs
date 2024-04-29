@@ -148,14 +148,16 @@ fn _print_node(node: Node, ident: u8) {
             _print_node(*body, ident + 1);
         }
         Node::FnCall {
-            identifier, expr, ..
+            identifier, args, ..
         } => {
             println!("FnCall");
             for _ in 0..ident + 1 {
                 print!("  ");
             }
             println!("identifier: {:?}", identifier);
-            _print_node(*expr, ident + 1);
+            for arg in args {
+                _print_node(arg, ident + 1);
+            }
         }
         Node::ReturnStmt { expr, fn_name } => {
             println!("ReturnStmt");
@@ -189,7 +191,7 @@ fn _print_node(node: Node, ident: u8) {
 }
 
 const DEBUG: bool = false;
-const DEBUG_TEST_FILE: &str = "tests/test26";
+const DEBUG_TEST_FILE: &str = "tests/test27";
 
 fn main() {
     let source = if !DEBUG {

@@ -73,7 +73,7 @@ pub enum Node {
     },
     FnCall {
         identifier: Token,
-        expr: Box<Node>,
+        args: Vec<Node>,
         ty: Type,
     },
     ReturnStmt {

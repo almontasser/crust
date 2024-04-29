@@ -993,6 +993,9 @@ impl Parser {
         self.current_fn = Some(symbol.clone());
         self.reset_offset();
         let body = self.compound_statement();
+        // delete local variables and
+        self.symbols
+            .retain(|x| x.class != StorageClass::Local && x.class != StorageClass::Param);
         // ensure that the function returns a value if it has a return type in the last statement
         if ty.is_some() {
             match &body {
@@ -1106,13 +1109,13 @@ impl Parser {
             );
         }
 
-        let expr = self.expression();
+        let args = self.parse_args();
 
         self.expect(vec![TokenType::RightParen]).unwrap();
 
         Node::FnCall {
             identifier,
-            expr: Box::new(expr),
+            args,
             ty: symbol.as_ref().clone().ty.unwrap(),
         }
     }
@@ -1264,5 +1267,20 @@ impl Parser {
         }
 
         params
+    }
+
+    fn parse_args(&mut self) -> Vec<Node> {
+        let mut args = Vec::new();
+
+        while !self.check(TokenType::RightParen) {
+            let expr = self.expression();
+            args.push(expr);
+
+            if !self.match_token(vec![TokenType::Comma]) {
+                break;
+            }
+        }
+
+        args
     }
 }
