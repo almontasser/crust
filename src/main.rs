@@ -189,7 +189,7 @@ fn _print_node(node: Node, ident: u8) {
 }
 
 const DEBUG: bool = false;
-const DEBUG_TEST_FILE: &str = "tests/test24";
+const DEBUG_TEST_FILE: &str = "tests/test26";
 
 fn main() {
     let source = if !DEBUG {

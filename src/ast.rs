@@ -69,6 +69,7 @@ pub enum Node {
         body: Box<Node>,
         stack_size: usize,
         return_type: Option<Type>,
+        params: Vec<Rc<Symbol>>,
     },
     FnCall {
         identifier: Token,

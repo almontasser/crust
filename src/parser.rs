@@ -17,6 +17,7 @@ pub enum SymbolType {
 pub enum StorageClass {
     Global,
     Local,
+    Param,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -28,6 +29,7 @@ pub struct Symbol {
     pub end_label: Option<String>,
     pub size: Option<usize>,
     pub offset: Option<isize>,
+    pub params: Option<Vec<Rc<Symbol>>>,
 }
 
 pub struct Parser {
@@ -62,6 +64,7 @@ impl Parser {
                     end_label: None,
                     size: None,
                     offset: None,
+                    params: None, // TODO: add params?
                 }),
                 Rc::new(Symbol {
                     identifier: Token {
@@ -77,6 +80,7 @@ impl Parser {
                     end_label: None,
                     size: None,
                     offset: None,
+                    params: None, // TODO: add params?
                 }),
             ],
             current_fn: None,
@@ -247,6 +251,7 @@ impl Parser {
                 Some(ty.clone()),
                 None,
                 offset,
+                None,
             );
 
             Node::VarDecl {
@@ -270,6 +275,7 @@ impl Parser {
                     Some(ty.clone()),
                     None,
                     offset,
+                    None,
                 ));
             }
 
@@ -810,6 +816,7 @@ impl Parser {
         ty: Option<Type>,
         end_label: Option<String>,
         offset: Option<isize>,
+        params: Option<Vec<Rc<Symbol>>>,
     ) -> Rc<Symbol> {
         let symbol = self.find_symbol(identifier.clone());
         if symbol.is_some() {
@@ -829,6 +836,7 @@ impl Parser {
             end_label,
             size: None,
             offset,
+            params,
         });
 
         self.symbols.push(Rc::clone(&symbol));
@@ -966,6 +974,7 @@ impl Parser {
         let end_label = Some(format!("{}{}", identifier.lexeme.clone().unwrap(), "_end"));
         self.expect(vec![TokenType::LeftParen]).unwrap();
         // TODO: parse parameters
+        let params = self.parse_params();
         self.expect(vec![TokenType::RightParen]).unwrap();
 
         let mut ty: Option<Type> = None;
@@ -979,6 +988,7 @@ impl Parser {
             ty.clone(),
             end_label,
             None,
+            Some(params.clone()),
         );
         self.current_fn = Some(symbol.clone());
         self.reset_offset();
@@ -1023,6 +1033,7 @@ impl Parser {
             body: Box::new(body),
             stack_size: self.local_offset,
             return_type: ty,
+            params,
         }
     }
 
@@ -1226,5 +1237,32 @@ impl Parser {
 
     fn reset_offset(&mut self) {
         self.local_offset = 0;
+    }
+
+    fn parse_params(&mut self) -> Vec<Rc<Symbol>> {
+        let mut params = Vec::new();
+
+        while self.check(TokenType::Identifier) {
+            let identifier = self.advance();
+            self.expect(vec![TokenType::Colon]).unwrap();
+            let ty = self.parse_type();
+            let offset = Some(0);
+            let symbol = self.add_symbol(
+                identifier.clone(),
+                SymbolType::Variable,
+                StorageClass::Param,
+                Some(ty.clone()),
+                None,
+                offset,
+                None,
+            );
+
+            params.push(symbol);
+            if !self.match_token(vec![TokenType::Comma]) {
+                break;
+            }
+        }
+
+        params
     }
 }

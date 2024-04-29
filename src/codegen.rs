@@ -26,12 +26,24 @@ pub struct CodeGen {
     registers: [bool; 4],
     label_count: usize,
     assignment_depth: usize,
+    local_offset: isize,
+    stack_offset: isize,
 }
 
-const REGISTER_NAMES: [&str; 4] = ["%r8", "%r9", "%r10", "%r11"];
-const BYTE_REGISTER_NAMES: [&str; 4] = ["%r8b", "%r9b", "%r10b", "%r11b"];
-const WORD_REGISTER_NAMES: [&str; 4] = ["%r8w", "%r9w", "%r10w", "%r11w"];
-const DWORD_REGISTER_NAMES: [&str; 4] = ["%r8d", "%r9d", "%r10d", "%r11d"];
+const FIRST_PARAM_REG: isize = 9;
+
+const REGISTER_NAMES: [&str; 10] = [
+    "%r10", "%r11", "%r12", "%r13", "%r9", "%r8", "%rcx", "%rdx", "%rsi", "%rdi",
+];
+const BYTE_REGISTER_NAMES: [&str; 10] = [
+    "%r10b", "%r11b", "%r12b", "%r13b", "%r9b", "%r8b", "%cl", "%dl", "%sil", "%dil",
+];
+const WORD_REGISTER_NAMES: [&str; 10] = [
+    "%r10w", "%r11w", "%r12w", "%r13w", "%r9w", "%r8w", "%cx", "%dx", "%si", "%di",
+];
+const DWORD_REGISTER_NAMES: [&str; 10] = [
+    "%r10d", "%r11d", "%r12d", "%r13d", "%r9d", "%r8d", "%ecx", "%edx", "%esi", "%edi",
+];
 
 impl CodeGen {
     pub fn new(nodes: Vec<Node>) -> Self {
@@ -41,6 +53,8 @@ impl CodeGen {
             registers: [false; 4],
             label_count: 0,
             assignment_depth: 0,
+            local_offset: 0,
+            stack_offset: 0,
         }
     }
 
@@ -67,7 +81,7 @@ impl CodeGen {
                 LiteralValue::U32(u) => self.load(u as u64, ty),
                 LiteralValue::U64(u) => self.load(u, ty),
                 LiteralValue::Identifier(s) => match s.class {
-                    StorageClass::Local => self.load_local(s, ty),
+                    StorageClass::Local | StorageClass::Param => self.load_local(s, ty),
                     StorageClass::Global => self.load_global(s, ty),
                 },
                 LiteralValue::String { value: s, label } => {
@@ -233,8 +247,9 @@ impl CodeGen {
                 identifier,
                 body,
                 stack_size,
+                params,
                 ..
-            } => self.function(identifier, stack_size, body),
+            } => self.function(identifier, params, stack_size, body),
             Node::FnCall {
                 identifier, expr, ..
             } => {
@@ -447,7 +462,7 @@ impl CodeGen {
             _ => ty,
         };
         match symbol.class {
-            StorageClass::Local => self.store_local(register, symbol, ty),
+            StorageClass::Local | StorageClass::Param => self.store_local(register, symbol, ty),
             StorageClass::Global => self.store_global(register, symbol, ty),
         }
     }
@@ -827,15 +842,24 @@ impl CodeGen {
         0
     }
 
-    fn function(&mut self, identifier: Token, stack_size: usize, body: Box<Node>) -> usize {
+    fn function(
+        &mut self,
+        identifier: Token,
+        params: Vec<Rc<Symbol>>,
+        stack_size: usize,
+        body: Box<Node>,
+    ) -> usize {
         let fn_name = identifier.lexeme.unwrap();
-        self.function_preamble(fn_name.clone(), stack_size);
+        self.function_preamble(fn_name.clone(), params, stack_size);
         self.generate_node(*body);
-        self.function_postamble(fn_name.clone(), stack_size);
+        self.function_postamble(fn_name.clone());
         0
     }
 
-    fn function_preamble(&mut self, name: String, stack_size: usize) {
+    fn function_preamble(&mut self, name: String, mut params: Vec<Rc<Symbol>>, stack_size: usize) {
+        let mut param_reg = FIRST_PARAM_REG;
+        let mut param_offset = 16;
+
         self.assembly
             .text
             .push_str(&format!("\t.global {}\n", name));
@@ -846,27 +870,50 @@ impl CodeGen {
         self.assembly.text.push_str("\tpushq\t%rbp\n");
         self.assembly.text.push_str("\tmovq\t%rsp, %rbp\n");
 
+        // Copy any in-register parameters to the stack
+        // Stop after six parameter registers
+        for (i, param) in params.iter_mut().enumerate() {
+            if i >= 6 {
+                break;
+            }
+
+            Rc::make_mut(param).offset =
+                Some(self.new_local_offset(param.as_ref().clone().ty.unwrap()));
+            self.store_local(
+                param_reg as usize,
+                param.clone(),
+                param.as_ref().clone().ty.unwrap(),
+            );
+
+            param_reg -= 1;
+        }
+
+        // For the remainder, if they are a parameter then they are
+        // already on the stack. If only a local, make a stack position.
+        if params.len() > 6 {
+            for param in params.iter_mut().skip(6) {
+                Rc::make_mut(param).offset = Some(param_offset);
+                param_offset += 8;
+            }
+        }
+
         // Align the stack pointer to be a multiple of 16
         // less than its previous value
-        let stack_offset = (stack_size + 15) & !15;
+        self.stack_offset = (self.local_offset + stack_size as isize + 15) & !15;
 
         self.assembly
             .text
-            .push_str(&format!("\tsubq\t${}, %rsp\n", stack_offset));
+            .push_str(&format!("\taddq\t${}, %rsp\n", -self.stack_offset));
     }
 
-    fn function_postamble(&mut self, fn_name: String, stack_size: usize) {
+    fn function_postamble(&mut self, fn_name: String) {
         self.assembly
             .text
             .push_str(format!("{}_end:\n", fn_name).as_str());
 
-        // Align the stack pointer to be a multiple of 16
-        // less than its previous value
-        let stack_offset = (stack_size + 15) & !15;
-
         self.assembly
             .text
-            .push_str(&format!("\taddq\t${}, %rsp\n", stack_offset));
+            .push_str(&format!("\taddq\t${}, %rsp\n", self.stack_offset));
         self.assembly.text.push_str("\tpopq\t%rbp\n");
         self.assembly.text.push_str("\tret\n");
     }
@@ -933,7 +980,7 @@ impl CodeGen {
                     REGISTER_NAMES[r]
                 ));
             }
-            StorageClass::Local => {
+            StorageClass::Local | StorageClass::Param => {
                 let offset = symbol.offset.unwrap();
                 self.assembly.text.push_str(&format!(
                     "\tleaq\t{}(%rbp), {}\n",
@@ -1056,7 +1103,7 @@ impl CodeGen {
                 self.free_register(r);
                 r2
             }
-            StorageClass::Local => {
+            StorageClass::Local | StorageClass::Param => {
                 let offset = match left.offset {
                     Some(s) => s,
                     None => panic!("Symbol not found"),
@@ -1340,5 +1387,17 @@ impl CodeGen {
         ));
         self.free_register(right);
         left
+    }
+
+    fn new_local_offset(&mut self, ty: Type) -> isize {
+        let size = ty.size();
+
+        if size > 4 {
+            self.local_offset += size as isize;
+        } else {
+            self.local_offset += 4;
+        }
+
+        -self.local_offset
     }
 }

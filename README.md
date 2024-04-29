@@ -1,4 +1,3 @@
-
 ![Crust](https://github.com/almontasser/crust/assets/19656179/6ac3df79-264b-464b-a180-11d1870445c8)
 
 # CRUST
@@ -20,11 +19,11 @@ Heavily inspired by https://github.com/DoctorWkt/acwj
 - [x] If Statements
 - [x] While Statements
 - [x] For Statements
-- [ ] Reading from console
+- [x] Function Parameters
 - [ ] Local Variables (Scopes)
+- [ ] Reading from console
 - [ ] Dynamic Arrays
 - [ ] Structs
-- [ ] Function Parameters
 - [ ] Unions
 - [ ] Enums
 - [ ] Break & Continue
