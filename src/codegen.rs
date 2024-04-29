@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{
     ast::{LiteralValue, Node},
     lexer::{Token, TokenType},
@@ -160,7 +162,7 @@ impl CodeGen {
                 ty,
             } => {
                 if !is_local {
-                    self.define_global(symbol.identifier.lexeme.unwrap(), ty);
+                    self.define_global(symbol.as_ref().clone().identifier.lexeme.unwrap(), ty);
                 }
                 0
             }
@@ -171,7 +173,10 @@ impl CodeGen {
             } => {
                 for symbol in symbols {
                     if !is_local {
-                        self.define_global(symbol.identifier.lexeme.unwrap(), ty.clone());
+                        self.define_global(
+                            symbol.as_ref().clone().identifier.lexeme.unwrap(),
+                            ty.clone(),
+                        );
                     }
                 }
                 0
@@ -184,7 +189,7 @@ impl CodeGen {
                         ..
                     } => {
                         let register = self.generate_node(*expr.clone());
-                        self.store(register, s.clone(), s.ty.unwrap());
+                        self.store(register, s.clone(), s.as_ref().clone().ty.unwrap());
                         self.assignment_depth -= 1;
                         register
                     }
@@ -377,9 +382,9 @@ impl CodeGen {
         r
     }
 
-    fn load_global(&mut self, symbol: Symbol, ty: Type) -> usize {
+    fn load_global(&mut self, symbol: Rc<Symbol>, ty: Type) -> usize {
         let r = self.allocate_register();
-        let identifier = symbol.identifier.lexeme.unwrap();
+        let identifier = symbol.as_ref().clone().identifier.lexeme.unwrap();
         if ty == Type::U8 || ty == Type::Char {
             self.assembly.text.push_str(&format!(
                 "\tmovzbq\t{}, {}\n",
@@ -436,7 +441,7 @@ impl CodeGen {
         r
     }
 
-    fn store(&mut self, register: usize, symbol: Symbol, ty: Type) {
+    fn store(&mut self, register: usize, symbol: Rc<Symbol>, ty: Type) {
         let ty = match ty {
             Type::Array { ty, .. } => ty.pointer_to(),
             _ => ty,
@@ -447,7 +452,7 @@ impl CodeGen {
         }
     }
 
-    fn store_local(&mut self, register: usize, symbol: Symbol, ty: Type) {
+    fn store_local(&mut self, register: usize, symbol: Rc<Symbol>, ty: Type) {
         let offset = symbol.offset.unwrap();
 
         if ty == Type::U8 || ty == Type::Char {
@@ -505,8 +510,8 @@ impl CodeGen {
         }
     }
 
-    fn store_global(&mut self, register: usize, symbol: Symbol, ty: Type) {
-        let identifier = symbol.identifier.lexeme.unwrap();
+    fn store_global(&mut self, register: usize, symbol: Rc<Symbol>, ty: Type) {
+        let identifier = symbol.as_ref().clone().identifier.lexeme.unwrap();
         if ty == Type::U8 || ty == Type::Char {
             self.assembly.text.push_str(&format!(
                 "\tmovb\t{}, {}\n",
@@ -882,7 +887,7 @@ impl CodeGen {
         out_register
     }
 
-    fn return_stmt(&mut self, expr: Box<Node>, fn_name: Symbol) -> usize {
+    fn return_stmt(&mut self, expr: Box<Node>, fn_name: Rc<Symbol>) -> usize {
         let register = self.generate_node(*expr);
         match fn_name.ty.clone().unwrap() {
             Type::U8 => {
@@ -917,14 +922,14 @@ impl CodeGen {
         0
     }
 
-    fn address_of(&mut self, symbol: Symbol) -> usize {
+    fn address_of(&mut self, symbol: Rc<Symbol>) -> usize {
         let r = self.allocate_register();
 
         match symbol.class {
             StorageClass::Global => {
                 self.assembly.text.push_str(&format!(
                     "\tleaq\t{}(%rip), {}\n",
-                    symbol.identifier.lexeme.unwrap(),
+                    symbol.as_ref().clone().identifier.lexeme.unwrap(),
                     REGISTER_NAMES[r]
                 ));
             }
@@ -1032,7 +1037,7 @@ impl CodeGen {
 
         match left.class {
             StorageClass::Global => {
-                let left = left.identifier.lexeme.unwrap();
+                let left = left.as_ref().clone().identifier.lexeme.unwrap();
                 let r = self.allocate_register();
                 let r2 = self.allocate_register();
                 self.assembly
@@ -1090,7 +1095,7 @@ impl CodeGen {
             _ => panic!("Unexpected token {:?}", left),
         };
 
-        let left = left.identifier.lexeme.unwrap();
+        let left = left.as_ref().clone().identifier.lexeme.unwrap();
         let r = self.allocate_register();
         let r2 = self.allocate_register();
         self.assembly
@@ -1119,7 +1124,7 @@ impl CodeGen {
             _ => panic!("Unexpected token {:?}", right),
         };
 
-        let right = right.identifier.lexeme.unwrap();
+        let right = right.as_ref().clone().identifier.lexeme.unwrap();
         let r = self.allocate_register();
         self.assembly
             .text
@@ -1142,7 +1147,7 @@ impl CodeGen {
             _ => panic!("Unexpected token {:?}", right),
         };
 
-        let right = right.identifier.lexeme.unwrap();
+        let right = right.as_ref().clone().identifier.lexeme.unwrap();
         let r = self.allocate_register();
         self.assembly
             .text
@@ -1200,7 +1205,7 @@ impl CodeGen {
         right_node
     }
 
-    fn load_local(&mut self, symbol: Symbol, ty: Type) -> usize {
+    fn load_local(&mut self, symbol: Rc<Symbol>, ty: Type) -> usize {
         let offset = match symbol.offset {
             Some(s) => s,
             None => panic!("Symbol not found"),

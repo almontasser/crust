@@ -1,4 +1,5 @@
 use core::panic;
+use std::rc::Rc;
 
 use crate::{
     ast::{LiteralValue, Node},
@@ -33,8 +34,8 @@ pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
     nodes: Vec<Node>,
-    symbols: Vec<Symbol>,
-    current_fn: Option<Symbol>,
+    symbols: Vec<Rc<Symbol>>,
+    current_fn: Option<Rc<Symbol>>,
     local_offset: usize,
 }
 
@@ -47,7 +48,7 @@ impl Parser {
             symbols: vec![
                 // builtin functions
                 // add print function
-                Symbol {
+                Rc::new(Symbol {
                     identifier: Token {
                         token_type: TokenType::Identifier,
                         lexeme: Some(String::from("printint")),
@@ -61,8 +62,8 @@ impl Parser {
                     end_label: None,
                     size: None,
                     offset: None,
-                },
-                Symbol {
+                }),
+                Rc::new(Symbol {
                     identifier: Token {
                         token_type: TokenType::Identifier,
                         lexeme: Some(String::from("printchar")),
@@ -76,7 +77,7 @@ impl Parser {
                     end_label: None,
                     size: None,
                     offset: None,
-                },
+                }),
             ],
             current_fn: None,
             local_offset: 0,
@@ -660,7 +661,7 @@ impl Parser {
 
                     Node::LiteralExpr {
                         value: LiteralValue::Identifier(symbol.clone()),
-                        ty: symbol.ty.unwrap(),
+                        ty: symbol.as_ref().clone().ty.unwrap(),
                     }
                 };
 
@@ -809,7 +810,7 @@ impl Parser {
         ty: Option<Type>,
         end_label: Option<String>,
         offset: Option<isize>,
-    ) -> Symbol {
+    ) -> Rc<Symbol> {
         let symbol = self.find_symbol(identifier.clone());
         if symbol.is_some() {
             panic!(
@@ -820,7 +821,7 @@ impl Parser {
             );
         }
 
-        let symbol = Symbol {
+        let symbol = Rc::new(Symbol {
             identifier,
             structure,
             class,
@@ -828,18 +829,18 @@ impl Parser {
             end_label,
             size: None,
             offset,
-        };
+        });
 
-        self.symbols.push(symbol.clone());
+        self.symbols.push(Rc::clone(&symbol));
 
         symbol
     }
 
-    fn find_symbol(&self, identifier: Token) -> Option<Symbol> {
-        let mut symbol: Option<Symbol> = None;
+    fn find_symbol(&self, identifier: Token) -> Option<Rc<Symbol>> {
+        let mut symbol: Option<Rc<Symbol>> = None;
         for it in &self.symbols {
             if it.identifier.lexeme.clone().unwrap() == identifier.lexeme.clone().unwrap() {
-                symbol = Some(it.clone());
+                symbol = Some(Rc::clone(&it));
                 if it.class == StorageClass::Local {
                     break;
                 }
@@ -1101,7 +1102,7 @@ impl Parser {
         Node::FnCall {
             identifier,
             expr: Box::new(expr),
-            ty: symbol.ty.unwrap(),
+            ty: symbol.as_ref().clone().ty.unwrap(),
         }
     }
 
@@ -1121,7 +1122,7 @@ impl Parser {
 
         let mut expr = self.expression();
 
-        expr = match self.modify_type(expr, fn_sym.clone().ty.unwrap(), None) {
+        expr = match self.modify_type(expr, fn_sym.as_ref().clone().clone().ty.unwrap(), None) {
             Some(node) => node,
             None => panic!(
                 "Incompatible types at line {} column {}",
@@ -1167,7 +1168,7 @@ impl Parser {
         });
         let mut left = Node::LiteralExpr {
             value: LiteralValue::Identifier(symbol.clone()),
-            ty: symbol.ty.unwrap(),
+            ty: symbol.as_ref().clone().ty.unwrap(),
         };
 
         let mut index = self.expression();
