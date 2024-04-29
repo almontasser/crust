@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::{
     ast::{LiteralValue, Node},
     lexer::{Token, TokenType},
@@ -176,7 +174,7 @@ impl CodeGen {
                 ty,
             } => {
                 if !is_local {
-                    self.define_global(symbol.as_ref().clone().identifier.lexeme.unwrap(), ty);
+                    self.define_global(symbol.identifier.lexeme.unwrap(), ty);
                 }
                 0
             }
@@ -187,10 +185,7 @@ impl CodeGen {
             } => {
                 for symbol in symbols {
                     if !is_local {
-                        self.define_global(
-                            symbol.as_ref().clone().identifier.lexeme.unwrap(),
-                            ty.clone(),
-                        );
+                        self.define_global(symbol.identifier.lexeme.unwrap(), ty.clone());
                     }
                 }
                 0
@@ -203,7 +198,7 @@ impl CodeGen {
                         ..
                     } => {
                         let register = self.generate_node(*expr.clone());
-                        self.store(register, s.clone(), s.as_ref().clone().ty.unwrap());
+                        self.store(register, s.clone(), s.ty.unwrap());
                         self.assignment_depth -= 1;
                         register
                     }
@@ -397,9 +392,9 @@ impl CodeGen {
         r
     }
 
-    fn load_global(&mut self, symbol: Rc<Symbol>, ty: Type) -> usize {
+    fn load_global(&mut self, symbol: Symbol, ty: Type) -> usize {
         let r = self.allocate_register();
-        let identifier = symbol.as_ref().clone().identifier.lexeme.unwrap();
+        let identifier = symbol.identifier.lexeme.unwrap();
         if ty == Type::U8 || ty == Type::Char {
             self.assembly.text.push_str(&format!(
                 "\tmovzbq\t{}, {}\n",
@@ -456,7 +451,7 @@ impl CodeGen {
         r
     }
 
-    fn store(&mut self, register: usize, symbol: Rc<Symbol>, ty: Type) {
+    fn store(&mut self, register: usize, symbol: Symbol, ty: Type) {
         let ty = match ty {
             Type::Array { ty, .. } => ty.pointer_to(),
             _ => ty,
@@ -467,7 +462,7 @@ impl CodeGen {
         }
     }
 
-    fn store_local(&mut self, register: usize, symbol: Rc<Symbol>, ty: Type) {
+    fn store_local(&mut self, register: usize, symbol: Symbol, ty: Type) {
         let offset = symbol.offset.unwrap();
 
         if ty == Type::U8 || ty == Type::Char {
@@ -525,8 +520,8 @@ impl CodeGen {
         }
     }
 
-    fn store_global(&mut self, register: usize, symbol: Rc<Symbol>, ty: Type) {
-        let identifier = symbol.as_ref().clone().identifier.lexeme.unwrap();
+    fn store_global(&mut self, register: usize, symbol: Symbol, ty: Type) {
+        let identifier = symbol.identifier.lexeme.unwrap();
         if ty == Type::U8 || ty == Type::Char {
             self.assembly.text.push_str(&format!(
                 "\tmovb\t{}, {}\n",
@@ -845,7 +840,7 @@ impl CodeGen {
     fn function(
         &mut self,
         identifier: Token,
-        params: Vec<Rc<Symbol>>,
+        params: Vec<Symbol>,
         stack_size: usize,
         body: Box<Node>,
     ) -> usize {
@@ -856,9 +851,8 @@ impl CodeGen {
         0
     }
 
-    fn function_preamble(&mut self, name: String, mut params: Vec<Rc<Symbol>>, stack_size: usize) {
+    fn function_preamble(&mut self, name: String, mut params: Vec<Symbol>, stack_size: usize) {
         let mut param_reg = FIRST_PARAM_REG;
-        let mut param_offset = 16;
 
         self.assembly
             .text
@@ -877,24 +871,9 @@ impl CodeGen {
                 break;
             }
 
-            Rc::make_mut(param).offset =
-                Some(self.new_local_offset(param.as_ref().clone().ty.unwrap()));
-            self.store_local(
-                param_reg as usize,
-                param.clone(),
-                param.as_ref().clone().ty.unwrap(),
-            );
+            self.store_local(param_reg as usize, param.clone(), param.clone().ty.unwrap());
 
             param_reg -= 1;
-        }
-
-        // For the remainder, if they are a parameter then they are
-        // already on the stack. If only a local, make a stack position.
-        if params.len() > 6 {
-            for param in params.iter_mut().skip(6) {
-                Rc::make_mut(param).offset = Some(param_offset);
-                param_offset += 8;
-            }
         }
 
         // Align the stack pointer to be a multiple of 16
@@ -922,11 +901,9 @@ impl CodeGen {
     }
 
     fn function_call(&mut self, identifier: crate::lexer::Token, args: Vec<Node>) -> usize {
-        let out_register = self.allocate_register();
-
-        for (i, arg) in args.iter().enumerate() {
+        for (i, arg) in args.iter().rev().enumerate() {
             let register = self.generate_node(arg.clone());
-            self.copy_arg(register, i);
+            self.copy_arg(register, args.len() - i);
             self.free_register(register);
         }
 
@@ -940,13 +917,14 @@ impl CodeGen {
                 .push_str(&format!("\taddq\t${}, %rsp\n", 8 * (args.len() - 6)));
         }
 
+        let out_register = self.allocate_register();
         self.assembly
             .text
             .push_str(&format!("\tmovq\t%rax, {}\n", REGISTER_NAMES[out_register]));
         out_register
     }
 
-    fn return_stmt(&mut self, expr: Box<Node>, fn_name: Rc<Symbol>) -> usize {
+    fn return_stmt(&mut self, expr: Box<Node>, fn_name: Symbol) -> usize {
         let register = self.generate_node(*expr);
         match fn_name.ty.clone().unwrap() {
             Type::U8 => {
@@ -981,14 +959,14 @@ impl CodeGen {
         0
     }
 
-    fn address_of(&mut self, symbol: Rc<Symbol>) -> usize {
+    fn address_of(&mut self, symbol: Symbol) -> usize {
         let r = self.allocate_register();
 
         match symbol.class {
             StorageClass::Global => {
                 self.assembly.text.push_str(&format!(
                     "\tleaq\t{}(%rip), {}\n",
-                    symbol.as_ref().clone().identifier.lexeme.unwrap(),
+                    symbol.identifier.lexeme.unwrap(),
                     REGISTER_NAMES[r]
                 ));
             }
@@ -1096,7 +1074,7 @@ impl CodeGen {
 
         match left.class {
             StorageClass::Global => {
-                let left = left.as_ref().clone().identifier.lexeme.unwrap();
+                let left = left.identifier.lexeme.unwrap();
                 let r = self.allocate_register();
                 let r2 = self.allocate_register();
                 self.assembly
@@ -1154,7 +1132,7 @@ impl CodeGen {
             _ => panic!("Unexpected token {:?}", left),
         };
 
-        let left = left.as_ref().clone().identifier.lexeme.unwrap();
+        let left = left.identifier.lexeme.unwrap();
         let r = self.allocate_register();
         let r2 = self.allocate_register();
         self.assembly
@@ -1183,7 +1161,7 @@ impl CodeGen {
             _ => panic!("Unexpected token {:?}", right),
         };
 
-        let right = right.as_ref().clone().identifier.lexeme.unwrap();
+        let right = right.identifier.lexeme.unwrap();
         let r = self.allocate_register();
         self.assembly
             .text
@@ -1206,7 +1184,7 @@ impl CodeGen {
             _ => panic!("Unexpected token {:?}", right),
         };
 
-        let right = right.as_ref().clone().identifier.lexeme.unwrap();
+        let right = right.identifier.lexeme.unwrap();
         let r = self.allocate_register();
         self.assembly
             .text
@@ -1264,7 +1242,7 @@ impl CodeGen {
         right_node
     }
 
-    fn load_local(&mut self, symbol: Rc<Symbol>, ty: Type) -> usize {
+    fn load_local(&mut self, symbol: Symbol, ty: Type) -> usize {
         let offset = match symbol.offset {
             Some(s) => s,
             None => panic!("Symbol not found"),
@@ -1401,19 +1379,12 @@ impl CodeGen {
         left
     }
 
-    fn new_local_offset(&mut self, ty: Type) -> isize {
-        let size = ty.size();
-
-        if size > 4 {
-            self.local_offset += size as isize;
-        } else {
-            self.local_offset += 4;
-        }
-
-        -self.local_offset
-    }
-
     fn copy_arg(&mut self, register: usize, arg_pos: usize) {
+        /*
+        FIRST_PARAM_REG = 9
+        const REGISTER_NAMES: [&str; 10] = ["%r10", "%r11", "%r12", "%r13", "%r9", "%r8", "%rcx", "%rdx", "%rsi", "%rdi"];
+
+         */
         if arg_pos > 6 {
             self.assembly
                 .text
@@ -1422,7 +1393,7 @@ impl CodeGen {
             self.assembly.text.push_str(&format!(
                 "\tmovq\t{}, {}\n",
                 REGISTER_NAMES[register],
-                REGISTER_NAMES[(FIRST_PARAM_REG - (arg_pos as isize)) as usize]
+                REGISTER_NAMES[(FIRST_PARAM_REG - (arg_pos as isize) + 1) as usize]
             ));
         }
     }

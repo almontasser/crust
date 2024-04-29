@@ -1,5 +1,4 @@
 use core::panic;
-use std::rc::Rc;
 
 use crate::{
     ast::{LiteralValue, Node},
@@ -29,15 +28,15 @@ pub struct Symbol {
     pub end_label: Option<String>,
     pub size: Option<usize>,
     pub offset: Option<isize>,
-    pub params: Option<Vec<Rc<Symbol>>>,
+    pub params: Option<Vec<Symbol>>,
 }
 
 pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
     nodes: Vec<Node>,
-    symbols: Vec<Rc<Symbol>>,
-    current_fn: Option<Rc<Symbol>>,
+    symbols: Vec<Symbol>,
+    current_fn: Option<Symbol>,
     local_offset: usize,
 }
 
@@ -50,7 +49,7 @@ impl Parser {
             symbols: vec![
                 // builtin functions
                 // add print function
-                Rc::new(Symbol {
+                Symbol {
                     identifier: Token {
                         token_type: TokenType::Identifier,
                         lexeme: Some(String::from("printint")),
@@ -64,9 +63,24 @@ impl Parser {
                     end_label: None,
                     size: None,
                     offset: None,
-                    params: None, // TODO: add params?
-                }),
-                Rc::new(Symbol {
+                    params: Some(vec![Symbol {
+                        identifier: Token {
+                            token_type: TokenType::Identifier,
+                            lexeme: Some(String::from("x")),
+                            line: 0,
+                            column: 0,
+                            value: None,
+                        },
+                        structure: SymbolType::Variable,
+                        class: StorageClass::Param,
+                        ty: Some(Type::U8),
+                        end_label: None,
+                        size: None,
+                        offset: None,
+                        params: None,
+                    }]),
+                },
+                Symbol {
                     identifier: Token {
                         token_type: TokenType::Identifier,
                         lexeme: Some(String::from("printchar")),
@@ -80,8 +94,23 @@ impl Parser {
                     end_label: None,
                     size: None,
                     offset: None,
-                    params: None, // TODO: add params?
-                }),
+                    params: Some(vec![Symbol {
+                        identifier: Token {
+                            token_type: TokenType::Identifier,
+                            lexeme: Some(String::from("x")),
+                            line: 0,
+                            column: 0,
+                            value: None,
+                        },
+                        structure: SymbolType::Variable,
+                        class: StorageClass::Param,
+                        ty: Some(Type::U8),
+                        end_label: None,
+                        size: None,
+                        offset: None,
+                        params: None,
+                    }]),
+                },
             ],
             current_fn: None,
             local_offset: 0,
@@ -667,7 +696,7 @@ impl Parser {
 
                     Node::LiteralExpr {
                         value: LiteralValue::Identifier(symbol.clone()),
-                        ty: symbol.as_ref().clone().ty.unwrap(),
+                        ty: symbol.ty.unwrap(),
                     }
                 };
 
@@ -816,8 +845,8 @@ impl Parser {
         ty: Option<Type>,
         end_label: Option<String>,
         offset: Option<isize>,
-        params: Option<Vec<Rc<Symbol>>>,
-    ) -> Rc<Symbol> {
+        params: Option<Vec<Symbol>>,
+    ) -> Symbol {
         let symbol = self.find_symbol(identifier.clone());
         if symbol.is_some() {
             panic!(
@@ -828,7 +857,7 @@ impl Parser {
             );
         }
 
-        let symbol = Rc::new(Symbol {
+        let symbol = Symbol {
             identifier,
             structure,
             class,
@@ -837,18 +866,18 @@ impl Parser {
             size: None,
             offset,
             params,
-        });
+        };
 
-        self.symbols.push(Rc::clone(&symbol));
+        self.symbols.push(symbol.clone());
 
         symbol
     }
 
-    fn find_symbol(&self, identifier: Token) -> Option<Rc<Symbol>> {
-        let mut symbol: Option<Rc<Symbol>> = None;
+    fn find_symbol(&self, identifier: Token) -> Option<Symbol> {
+        let mut symbol: Option<Symbol> = None;
         for it in &self.symbols {
             if it.identifier.lexeme.clone().unwrap() == identifier.lexeme.clone().unwrap() {
-                symbol = Some(Rc::clone(&it));
+                symbol = Some(it.clone());
                 if it.class == StorageClass::Local {
                     break;
                 }
@@ -974,6 +1003,7 @@ impl Parser {
         let end_label = Some(format!("{}{}", identifier.lexeme.clone().unwrap(), "_end"));
         self.expect(vec![TokenType::LeftParen]).unwrap();
         // TODO: parse parameters
+        self.reset_offset();
         let params = self.parse_params();
         self.expect(vec![TokenType::RightParen]).unwrap();
 
@@ -991,7 +1021,6 @@ impl Parser {
             Some(params.clone()),
         );
         self.current_fn = Some(symbol.clone());
-        self.reset_offset();
         let body = self.compound_statement();
         // delete local variables and
         self.symbols
@@ -1116,7 +1145,7 @@ impl Parser {
         Node::FnCall {
             identifier,
             args,
-            ty: symbol.as_ref().clone().ty.unwrap(),
+            ty: symbol.ty.unwrap(),
         }
     }
 
@@ -1136,7 +1165,7 @@ impl Parser {
 
         let mut expr = self.expression();
 
-        expr = match self.modify_type(expr, fn_sym.as_ref().clone().clone().ty.unwrap(), None) {
+        expr = match self.modify_type(expr, fn_sym.clone().ty.unwrap(), None) {
             Some(node) => node,
             None => panic!(
                 "Incompatible types at line {} column {}",
@@ -1182,7 +1211,7 @@ impl Parser {
         });
         let mut left = Node::LiteralExpr {
             value: LiteralValue::Identifier(symbol.clone()),
-            ty: symbol.as_ref().clone().ty.unwrap(),
+            ty: symbol.ty.unwrap(),
         };
 
         let mut index = self.expression();
@@ -1242,21 +1271,29 @@ impl Parser {
         self.local_offset = 0;
     }
 
-    fn parse_params(&mut self) -> Vec<Rc<Symbol>> {
+    fn parse_params(&mut self) -> Vec<Symbol> {
         let mut params = Vec::new();
 
+        let mut i = 0;
+        let mut local_offset = 16;
         while self.check(TokenType::Identifier) {
             let identifier = self.advance();
             self.expect(vec![TokenType::Colon]).unwrap();
             let ty = self.parse_type();
-            let offset = Some(0);
+            let offset: isize;
+            if i < 6 {
+                offset = self.gen_offset(ty.clone());
+            } else {
+                offset = local_offset;
+                local_offset += 8;
+            }
             let symbol = self.add_symbol(
                 identifier.clone(),
                 SymbolType::Variable,
                 StorageClass::Param,
                 Some(ty.clone()),
                 None,
-                offset,
+                Some(offset),
                 None,
             );
 
@@ -1264,6 +1301,8 @@ impl Parser {
             if !self.match_token(vec![TokenType::Comma]) {
                 break;
             }
+
+            i += 1;
         }
 
         params

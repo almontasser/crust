@@ -20,7 +20,8 @@ Heavily inspired by https://github.com/DoctorWkt/acwj
 - [x] While Statements
 - [x] For Statements
 - [x] Function Parameters
-- [ ] Local Variables (Scopes)
+- [x] Function Arguments
+- [x] Local Variables (Scopes)
 - [ ] Reading from console
 - [ ] Dynamic Arrays
 - [ ] Structs

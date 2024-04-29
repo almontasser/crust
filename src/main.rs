@@ -70,11 +70,7 @@ fn _print_node(node: Node, ident: u8) {
             for _ in 0..ident + 1 {
                 print!("  ");
             }
-            println!(
-                "{}: {:?}",
-                symbol.as_ref().clone().identifier.lexeme.unwrap(),
-                ty
-            )
+            println!("{}: {:?}", symbol.identifier.lexeme.unwrap(), ty)
         }
         Node::VarDeclMany { symbols, ty, .. } => {
             println!("GlobalVarMany");
@@ -82,11 +78,7 @@ fn _print_node(node: Node, ident: u8) {
                 print!("  ");
             }
             for symbol in symbols {
-                println!(
-                    "{}: {:?}",
-                    symbol.as_ref().clone().identifier.lexeme.unwrap(),
-                    ty
-                )
+                println!("{}: {:?}", symbol.identifier.lexeme.unwrap(), ty)
             }
         }
         Node::AssignStmt { left, expr } => {
