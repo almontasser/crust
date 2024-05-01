@@ -78,9 +78,11 @@ impl CodeGen {
                 LiteralValue::U16(u) => self.load(u as u64, ty),
                 LiteralValue::U32(u) => self.load(u as u64, ty),
                 LiteralValue::U64(u) => self.load(u, ty),
-                LiteralValue::Identifier(s) => match s.class {
-                    StorageClass::Local | StorageClass::Param => self.load_local(s, ty),
-                    StorageClass::Global => self.load_global(s, ty),
+                LiteralValue::Identifier(s) => match s.borrow().class {
+                    StorageClass::Local | StorageClass::Param => {
+                        self.load_local(s.borrow().to_owned(), ty)
+                    }
+                    StorageClass::Global => self.load_global(s.borrow().clone(), ty),
                 },
                 LiteralValue::String { value: s, label } => {
                     self.define_string(label.clone(), s);
@@ -137,7 +139,7 @@ impl CodeGen {
                             _ => panic!("Unexpected token {:?}", right),
                         };
 
-                        self.address_of(symbol.clone())
+                        self.address_of(symbol.borrow().clone())
                     }
                     TokenType::Mul => {
                         let right_node = self.generate_node(*right.clone());
@@ -174,7 +176,16 @@ impl CodeGen {
                 ty,
             } => {
                 if !is_local {
-                    self.define_global(symbol.identifier.lexeme.unwrap(), ty);
+                    self.define_global(
+                        symbol
+                            .borrow()
+                            .identifier
+                            .lexeme
+                            .as_ref()
+                            .unwrap()
+                            .to_owned(),
+                        ty,
+                    );
                 }
                 0
             }
@@ -185,7 +196,16 @@ impl CodeGen {
             } => {
                 for symbol in symbols {
                     if !is_local {
-                        self.define_global(symbol.identifier.lexeme.unwrap(), ty.clone());
+                        self.define_global(
+                            symbol
+                                .borrow()
+                                .identifier
+                                .lexeme
+                                .as_ref()
+                                .unwrap()
+                                .to_owned(),
+                            ty.clone(),
+                        );
                     }
                 }
                 0
@@ -198,7 +218,11 @@ impl CodeGen {
                         ..
                     } => {
                         let register = self.generate_node(*expr.clone());
-                        self.store(register, s.clone(), s.ty.unwrap());
+                        self.store(
+                            register,
+                            s.borrow().clone(),
+                            s.borrow().ty.as_ref().unwrap().to_owned(),
+                        );
                         self.assignment_depth -= 1;
                         register
                     }
@@ -244,7 +268,12 @@ impl CodeGen {
                 stack_size,
                 params,
                 ..
-            } => self.function(identifier, params, stack_size, body),
+            } => self.function(
+                identifier,
+                params.iter().map(|param| param.borrow().clone()).collect(),
+                stack_size,
+                body,
+            ),
             Node::FnCall {
                 identifier, args, ..
             } => {
@@ -257,7 +286,7 @@ impl CodeGen {
                     r
                 }
             }
-            Node::ReturnStmt { expr, fn_name } => self.return_stmt(expr, fn_name),
+            Node::ReturnStmt { expr, fn_name } => self.return_stmt(expr, fn_name.borrow().clone()),
             Node::PostIncStmt { left } => self.post_inc_stmt(left),
             Node::PostDecStmt { left } => self.post_dec_stmt(left),
             Node::PreIncStmt { right } => self.pre_inc_stmt(right),
@@ -1055,9 +1084,12 @@ impl CodeGen {
             _ => panic!("Unexpected token {:?}", left),
         };
 
-        match left.class {
+        match left.clone().borrow().class {
             StorageClass::Global => {
-                let left = left.identifier.lexeme.unwrap();
+                let left = {
+                    let borrowed = left.borrow();
+                    borrowed.identifier.lexeme.clone().unwrap()
+                };
                 let r = self.allocate_register();
                 let r2 = self.allocate_register();
                 self.assembly
@@ -1077,7 +1109,7 @@ impl CodeGen {
                 r2
             }
             StorageClass::Local | StorageClass::Param => {
-                let offset = match left.offset {
+                let offset = match left.borrow().offset {
                     Some(s) => s,
                     None => panic!("Symbol not found"),
                 };
@@ -1107,7 +1139,7 @@ impl CodeGen {
 
     fn post_dec_stmt(&mut self, left: Box<Node>) -> usize {
         // should decrement the value and return the old value
-        let left = match *left.clone() {
+        let left = match *left {
             Node::LiteralExpr {
                 value: LiteralValue::Identifier(i),
                 ..
@@ -1115,7 +1147,8 @@ impl CodeGen {
             _ => panic!("Unexpected token {:?}", left),
         };
 
-        let left = left.identifier.lexeme.unwrap();
+        let binding = left.borrow();
+        let left = binding.identifier.lexeme.as_ref().unwrap();
         let r = self.allocate_register();
         let r2 = self.allocate_register();
         self.assembly
@@ -1144,7 +1177,8 @@ impl CodeGen {
             _ => panic!("Unexpected token {:?}", right),
         };
 
-        let right = right.identifier.lexeme.unwrap();
+        let binding = right.borrow();
+        let right = binding.identifier.lexeme.as_ref().unwrap();
         let r = self.allocate_register();
         self.assembly
             .text
@@ -1167,7 +1201,8 @@ impl CodeGen {
             _ => panic!("Unexpected token {:?}", right),
         };
 
-        let right = right.identifier.lexeme.unwrap();
+        let binding = right.borrow();
+        let right = binding.identifier.lexeme.as_ref().unwrap();
         let r = self.allocate_register();
         self.assembly
             .text

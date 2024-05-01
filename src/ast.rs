@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::{lexer::Token, parser::Symbol, types::Type};
 
 #[derive(Debug, Clone)]
@@ -6,7 +8,7 @@ pub enum LiteralValue {
     U16(u16),
     U32(u32),
     U64(u64),
-    Identifier(Symbol),
+    Identifier(Rc<RefCell<Symbol>>),
     String { value: String, label: String },
 }
 
@@ -37,12 +39,12 @@ pub enum Node {
         ty: Type,
     },
     VarDecl {
-        symbol: Symbol,
+        symbol: Rc<RefCell<Symbol>>,
         is_local: bool,
         ty: Type,
     },
     VarDeclMany {
-        symbols: Vec<Symbol>,
+        symbols: Vec<Rc<RefCell<Symbol>>>,
         is_local: bool,
         ty: Type,
     },
@@ -67,7 +69,7 @@ pub enum Node {
         body: Box<Node>,
         stack_size: usize,
         return_type: Option<Type>,
-        params: Vec<Symbol>,
+        params: Vec<Rc<RefCell<Symbol>>>,
     },
     FnCall {
         identifier: Token,
@@ -76,7 +78,7 @@ pub enum Node {
     },
     ReturnStmt {
         expr: Box<Node>,
-        fn_name: Symbol,
+        fn_name: Rc<RefCell<Symbol>>,
     },
     PostIncStmt {
         left: Box<Node>,

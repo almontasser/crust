@@ -1,4 +1,5 @@
 use core::panic;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     ast::{LiteralValue, Node},
@@ -28,15 +29,15 @@ pub struct Symbol {
     pub end_label: Option<String>,
     pub size: Option<usize>,
     pub offset: Option<isize>,
-    pub params: Option<Vec<Symbol>>,
+    pub params: Option<Vec<Rc<RefCell<Symbol>>>>,
 }
 
 pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
     nodes: Vec<Node>,
-    symbols: Vec<Symbol>,
-    current_fn: Option<Symbol>,
+    symbols: Vec<Rc<RefCell<Symbol>>>,
+    current_fn: Option<Rc<RefCell<Symbol>>>,
     local_offset: usize,
 }
 
@@ -49,7 +50,7 @@ impl Parser {
             symbols: vec![
                 // builtin functions
                 // add print function
-                Symbol {
+                Rc::new(RefCell::new(Symbol {
                     identifier: Token {
                         token_type: TokenType::Identifier,
                         lexeme: Some(String::from("printint")),
@@ -63,7 +64,7 @@ impl Parser {
                     end_label: None,
                     size: None,
                     offset: None,
-                    params: Some(vec![Symbol {
+                    params: Some(vec![Rc::new(RefCell::new(Symbol {
                         identifier: Token {
                             token_type: TokenType::Identifier,
                             lexeme: Some(String::from("x")),
@@ -78,9 +79,9 @@ impl Parser {
                         size: None,
                         offset: None,
                         params: None,
-                    }]),
-                },
-                Symbol {
+                    }))]),
+                })),
+                Rc::new(RefCell::new(Symbol {
                     identifier: Token {
                         token_type: TokenType::Identifier,
                         lexeme: Some(String::from("printchar")),
@@ -94,7 +95,7 @@ impl Parser {
                     end_label: None,
                     size: None,
                     offset: None,
-                    params: Some(vec![Symbol {
+                    params: Some(vec![Rc::new(RefCell::new(Symbol {
                         identifier: Token {
                             token_type: TokenType::Identifier,
                             lexeme: Some(String::from("x")),
@@ -109,8 +110,8 @@ impl Parser {
                         size: None,
                         offset: None,
                         params: None,
-                    }]),
-                },
+                    }))]),
+                })),
             ],
             current_fn: None,
             local_offset: 0,
@@ -684,35 +685,28 @@ impl Parser {
             Some(symbol) => {
                 // TODO: This is hacky, fix it
                 if self.match_token(vec![TokenType::LeftParen]) {
-                    if symbol.structure != SymbolType::Function {
+                    if symbol.borrow().structure != SymbolType::Function {
                         panic!(
                             "Expected function at line {} column {}",
                             identifier.line, identifier.column
                         );
                     }
                     return self.function_call();
-                } else if symbol.structure != SymbolType::Variable {
+                } else if symbol.borrow().structure != SymbolType::Variable {
                     panic!(
                         "Expected variable at line {} column {} got {:?}",
-                        identifier.line, identifier.column, symbol.structure
+                        identifier.line,
+                        identifier.column,
+                        symbol.borrow().structure
                     );
                 }
 
                 let left = if self.match_token(vec![TokenType::LeftBracket]) {
                     self.array_access()
                 } else {
-                    let symbol = self.find_symbol(identifier.clone()).unwrap_or_else(|| {
-                        panic!(
-                            "Variable {} not declared at line {} column {}",
-                            identifier.lexeme.clone().unwrap(),
-                            identifier.line,
-                            identifier.column
-                        )
-                    });
-
                     Node::LiteralExpr {
                         value: LiteralValue::Identifier(symbol.clone()),
-                        ty: symbol.ty.unwrap(),
+                        ty: symbol.borrow().ty.as_ref().unwrap().clone(),
                     }
                 };
 
@@ -861,11 +855,11 @@ impl Parser {
         ty: Option<Type>,
         end_label: Option<String>,
         offset: Option<isize>,
-        params: Option<Vec<Symbol>>,
-    ) -> Symbol {
+        params: Option<Vec<Rc<RefCell<Symbol>>>>,
+    ) -> Rc<RefCell<Symbol>> {
         let symbol = self.find_symbol(identifier.clone());
         if symbol.is_some() {
-            let ty = if symbol.unwrap().structure == SymbolType::Variable {
+            let ty = if symbol.unwrap().borrow().structure == SymbolType::Variable {
                 "Variable"
             } else {
                 "Function"
@@ -880,7 +874,7 @@ impl Parser {
             );
         }
 
-        let symbol = Symbol {
+        let symbol = Rc::new(RefCell::new(Symbol {
             identifier,
             structure,
             class,
@@ -889,19 +883,20 @@ impl Parser {
             size: None,
             offset,
             params,
-        };
+        }));
 
         self.symbols.push(symbol.clone());
 
         symbol
     }
 
-    fn find_symbol(&self, identifier: Token) -> Option<Symbol> {
-        let mut symbol: Option<Symbol> = None;
+    fn find_symbol(&self, identifier: Token) -> Option<Rc<RefCell<Symbol>>> {
+        let mut symbol: Option<Rc<RefCell<Symbol>>> = None;
         for it in &self.symbols {
-            if it.identifier.lexeme.clone().unwrap() == identifier.lexeme.clone().unwrap() {
+            if it.borrow().identifier.lexeme.clone().unwrap() == identifier.lexeme.clone().unwrap()
+            {
                 symbol = Some(it.clone());
-                if it.class == StorageClass::Local {
+                if it.borrow().class == StorageClass::Local {
                     break;
                 }
             }
@@ -1043,7 +1038,7 @@ impl Parser {
                 ty.clone(),
                 end_label,
                 None,
-                Some(params.clone()),
+                Some(params),
             );
 
             // Skip the body
@@ -1064,8 +1059,9 @@ impl Parser {
         self.current_fn = self.find_symbol(identifier.clone());
         let body = self.compound_statement();
         // delete local variables and
-        self.symbols
-            .retain(|x| x.class != StorageClass::Local && x.class != StorageClass::Param);
+        self.symbols.retain(|x| {
+            x.borrow().class != StorageClass::Local && x.borrow().class != StorageClass::Param
+        });
         // ensure that the function returns a value if it has a return type in the last statement
         if ty.is_some() {
             match &body {
@@ -1172,7 +1168,7 @@ impl Parser {
         }
 
         let symbol = symbol.unwrap();
-        if symbol.structure != SymbolType::Function {
+        if symbol.borrow().structure != SymbolType::Function {
             panic!(
                 "Expected function at line {} column {}",
                 identifier.line, identifier.column
@@ -1183,10 +1179,11 @@ impl Parser {
 
         self.expect(vec![TokenType::RightParen]).unwrap();
 
+        let ty = symbol.borrow().ty.as_ref().unwrap().clone();
         Node::FnCall {
             identifier,
             args,
-            ty: symbol.ty.unwrap(),
+            ty,
         }
     }
 
@@ -1197,16 +1194,17 @@ impl Parser {
 
         let fn_sym = self.current_fn.clone().unwrap();
 
-        if fn_sym.ty.is_none() {
+        if fn_sym.borrow().ty.is_none() {
             panic!(
                 "Function {} has no return type",
-                fn_sym.identifier.lexeme.clone().unwrap()
+                fn_sym.borrow().identifier.lexeme.clone().unwrap()
             );
         }
 
         let mut expr = self.expression();
 
-        expr = match self.modify_type(expr, fn_sym.clone().ty.unwrap(), None) {
+        let ty = fn_sym.borrow().ty.as_ref().unwrap().clone();
+        expr = match self.modify_type(expr, ty, None) {
             Some(node) => node,
             None => panic!(
                 "Incompatible types at line {} column {}",
@@ -1235,10 +1233,12 @@ impl Parser {
         }
 
         let symbol = symbol.unwrap();
-        if symbol.structure != SymbolType::Variable {
+        if symbol.borrow().structure != SymbolType::Variable {
             panic!(
                 "Expected variable at line {} column {} got {:?}",
-                identifier.line, identifier.column, symbol.structure
+                identifier.line,
+                identifier.column,
+                symbol.borrow().structure
             );
         }
 
@@ -1250,9 +1250,10 @@ impl Parser {
                 identifier.column
             )
         });
+        let ty = symbol.borrow().ty.as_ref().unwrap().clone();
         let mut left = Node::LiteralExpr {
-            value: LiteralValue::Identifier(symbol.clone()),
-            ty: symbol.ty.unwrap(),
+            value: LiteralValue::Identifier(symbol),
+            ty,
         };
 
         let mut index = self.expression();
@@ -1312,7 +1313,7 @@ impl Parser {
         self.local_offset = 0;
     }
 
-    fn parse_params(&mut self, first_pass: bool) -> Vec<Symbol> {
+    fn parse_params(&mut self, first_pass: bool) -> Vec<Rc<RefCell<Symbol>>> {
         let mut params = Vec::new();
 
         let mut i = 0;
@@ -1328,20 +1329,8 @@ impl Parser {
                 offset = local_offset;
                 local_offset += 8;
             }
-            if !first_pass {
-                // TODO: Merge it with the bellow symbol, make single creation of a symbol
-                self.add_symbol(
-                    identifier.clone(),
-                    SymbolType::Variable,
-                    StorageClass::Param,
-                    Some(ty.clone()),
-                    None,
-                    Some(offset),
-                    None,
-                );
-            }
 
-            let symbol = Symbol {
+            let symbol = Rc::new(RefCell::new(Symbol {
                 identifier,
                 structure: SymbolType::Variable,
                 class: StorageClass::Param,
@@ -1350,7 +1339,21 @@ impl Parser {
                 size: None,
                 offset: Some(offset),
                 params: None,
-            };
+            }));
+
+            if !first_pass {
+                // TODO: Merge it with the bellow symbol, make single creation of a symbol
+                self.symbols.push(symbol.clone());
+                // self.add_symbol(
+                //     identifier.clone(),
+                //     SymbolType::Variable,
+                //     StorageClass::Param,
+                //     Some(ty.clone()),
+                //     None,
+                //     Some(offset),
+                //     None,
+                // );
+            }
 
             params.push(symbol);
 
