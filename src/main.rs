@@ -24,7 +24,7 @@ fn _print_node(node: Node, ident: u8) {
         } => {
             println!("BinaryExpr");
             _print_node(*left, ident + 1);
-            for _ in 0..ident + 1 {
+            for _ in 0..=ident {
                 print!("  ");
             }
             println!("operator: {:?}", operator);
@@ -36,12 +36,12 @@ fn _print_node(node: Node, ident: u8) {
             ty,
         } => {
             println!("UnaryExpr");
-            for _ in 0..ident + 1 {
+            for _ in 0..=ident {
                 print!("  ");
             }
             println!("operator: {:?}", operator);
             _print_node(*right, ident + 1);
-            for _ in 0..ident + 1 {
+            for _ in 0..=ident {
                 print!("  ");
             }
             println!("ty: {:?}", ty)
@@ -52,7 +52,7 @@ fn _print_node(node: Node, ident: u8) {
         }
         Node::ScaleExpr { right, size, .. } => {
             println!("ScaleExpr");
-            for _ in 0..ident + 1 {
+            for _ in 0..=ident {
                 print!("  ");
             }
             println!("size: {}", size);
@@ -60,14 +60,14 @@ fn _print_node(node: Node, ident: u8) {
         }
         Node::LiteralExpr { value, .. } => {
             println!("LiteralExpr");
-            for _ in 0..ident + 1 {
+            for _ in 0..=ident {
                 print!("  ");
             }
             println!("value: {:?}", value);
         }
         Node::VarDecl { symbol, ty, .. } => {
             println!("GlobalVar");
-            for _ in 0..ident + 1 {
+            for _ in 0..=ident {
                 print!("  ");
             }
             println!(
@@ -78,7 +78,7 @@ fn _print_node(node: Node, ident: u8) {
         }
         Node::VarDeclMany { symbols, ty, .. } => {
             println!("GlobalVarMany");
-            for _ in 0..ident + 1 {
+            for _ in 0..=ident {
                 print!("  ");
             }
             for symbol in symbols {
@@ -91,12 +91,12 @@ fn _print_node(node: Node, ident: u8) {
         }
         Node::AssignStmt { left, expr } => {
             println!("AssignStmt");
-            for _ in 0..ident + 1 {
+            for _ in 0..=ident {
                 print!("  ");
             }
             println!("left:");
             _print_node(*left, ident + 2);
-            for _ in 0..ident + 1 {
+            for _ in 0..=ident {
                 print!("  ");
             }
             println!("expr:");
@@ -104,7 +104,7 @@ fn _print_node(node: Node, ident: u8) {
         }
         Node::CompoundStmt { statements } => {
             println!("CompoundStmt");
-            for _ in 0..ident + 1 {
+            for _ in 0..=ident {
                 print!("  ");
             }
             println!("statements:");
@@ -136,7 +136,7 @@ fn _print_node(node: Node, ident: u8) {
             ..
         } => {
             println!("FnDecl");
-            for _ in 0..ident + 1 {
+            for _ in 0..=ident {
                 print!("  ");
             }
             println!(
@@ -151,7 +151,7 @@ fn _print_node(node: Node, ident: u8) {
             identifier, args, ..
         } => {
             println!("FnCall");
-            for _ in 0..ident + 1 {
+            for _ in 0..=ident {
                 print!("  ");
             }
             println!("identifier: {:?}", identifier);
@@ -161,7 +161,7 @@ fn _print_node(node: Node, ident: u8) {
         }
         Node::ReturnStmt { expr, fn_name } => {
             println!("ReturnStmt");
-            for _ in 0..ident + 1 {
+            for _ in 0..=ident {
                 print!("  ");
             }
             println!("fn_name: {:?}", fn_name);
