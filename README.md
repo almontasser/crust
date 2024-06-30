@@ -41,7 +41,7 @@ Heavily inspired by https://github.com/DoctorWkt/acwj
 
 ```sh
 cargo run <input-file> # Compile the crust language to assembly, which will be written to out.s
-cc -o bin out.s # Use the GNU C compiler to compile and link the assembly code to an executable file
+cc -no-pie -z noexecstack -o bin out.s # Use the GNU C compiler to compile and link the assembly code to an executable file
 ./bin # Execute the produced binary
 ```
 
