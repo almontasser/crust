@@ -1,0 +1,3 @@
+/home/mahmoud/projects/crust20/cmake-build-debug/CMakeFiles/crust.dir
+/home/mahmoud/projects/crust20/cmake-build-debug/CMakeFiles/edit_cache.dir
+/home/mahmoud/projects/crust20/cmake-build-debug/CMakeFiles/rebuild_cache.dir
