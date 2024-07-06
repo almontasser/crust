@@ -18,6 +18,7 @@ auto gen_label_counter = -1; // So the labels start at 0
 auto gen_current_break = -2;
 
 std::vector<char *> gen_string_literals = {};
+std::vector<char *> gen_float_literals = {};
 
 void generate_block(Node *node);
 
@@ -157,9 +158,9 @@ void generate_binop_float_arith(Node * node) {
 
     char* op = nullptr;
     if (node->type == AST_PLUS) op = "addsd";
-    // else if (node->type == AST_MINUS) op = "subsd";
+    else if (node->type == AST_MINUS) op = "subsd";
     else if (node->type == AST_MUL) op = "mulsd";
-    // else if (node->type == AST_DIV) op = "divsd";
+    else if (node->type == AST_DIV) op = "divsd";
     else {
         std::cerr << "Unsupported binary op in generate_binop_float_arith: " << node->type << std::endl;
         exit(1);
@@ -176,31 +177,30 @@ void generate_binop_int_arith(Node * node) {
 
     char* op = nullptr;
     if (node->type == AST_PLUS) op = "add";
-    // else if (node->type == AST_MINUS) op = "sub";
-    // else if (node->type == AST_LSHIFT) op = "shl";
-    // else if (node->type == AST_RSHIFT) op = "shr";
-    // else if (node->type == AST_BWAND) op = "and";
-    // else if (node->type == AST_BWOR) op = "or";
-    // else if (node->type == AST_XOR) op = "xor";
+    else if (node->type == AST_MINUS) op = "sub";
+    else if (node->type == AST_LSHIFT) op = "shl";
+    else if (node->type == AST_RSHIFT) op = "shr";
+    else if (node->type == AST_BWAND) op = "and";
+    else if (node->type == AST_BWOR) op = "or";
+    else if (node->type == AST_XOR) op = "xor";
     else if (node->type == AST_MUL) op = "imul";
-    // else if (node->type == AST_DIV) op = "idiv";
-    // else if (node->type == AST_MOD) op = "idiv";
+    else if (node->type == AST_DIV) op = "idiv";
+    else if (node->type == AST_MOD) op = "idiv";
     else {
         std::cerr << "Unsupported binary op in generate_binop_int_arith: " << node->type << std::endl;
         exit(1);
     }
 
-    // if (node->type == AST_DIV || node->type == AST_MOD) {
-    //     emit_asm("\tcqo\n");
-    //     emit_asm("\tidiv rcx\n");
-    //     if (node->type == AST_MOD)
-    //         emit_asm("\tmov rax, rdx\n");
-    // } else if (node->type == AST_LSHIFT || node->type == AST_RSHIFT) {
-    //     emit_asm3("\t", op, " rax, cl\n");
-    //
-    // } else {
+    if (node->type == AST_DIV || node->type == AST_MOD) {
+        emit_asm("\tcqo\n");
+        emit_asm("\tidiv rcx\n");
+        if (node->type == AST_MOD)
+            emit_asm("\tmov rax, rdx\n");
+    } else if (node->type == AST_LSHIFT || node->type == AST_RSHIFT) {
+        emit_asm3("\t", op, " rax, cl\n");
+    } else {
         emit_asm3("\t", op, " rax, rcx\n");
-    // }
+    }
 }
 
 void generate_expression(Node *node) {
@@ -216,17 +216,67 @@ void generate_expression(Node *node) {
             emit_asm("\tmov rax, qword gs_");
             emit_num(idx);
             emit_asm("\n");
+        } else if (is_float_type(node->etype)) {
+            auto idx = gen_float_literals.size(); // TODO: check for duplicates
+            gen_float_literals.push_back(node->literal.as_string);
+            emit_asm("\tmov rax, [qword gf_");
+            emit_num(idx);
+            emit_asm("]\n");
+            emit_asm("\tmov [rsp-8], rax\n");
+            emit_asm("\tmovsd xmm0, [rsp-8]\n");
+        } else {
+            std::cerr << "Unsupported literal type in generate_expression: " << node->etype->base << std::endl;
+            exit(1);
         }
-    } else if (node->type == AST_FUNCTION_CALL) {
-        generate_function_call(node);
+    } else if (node->type == AST_ADDRESS_OF) {
+        generate_lvalue_into_rax(node->expr);
+    } else if (node->type == AST_CONDITIONAL) {
+        auto label = ++gen_label_counter;
+        generate_expression(node->conditional.condition);
+        emit_asm("\tcmp rax, 0\n");
+        emit_asm("\tje .cond_else_"); emit_num(label); emit_asm("\n");
+        generate_expression(node->conditional.then);
+        emit_asm("\tjmp .cond_end_"); emit_num(label); emit_asm("\n");
+        emit_asm(".cond_else_"); emit_num(label); emit_asm(":\n");
+        generate_expression(node->conditional.els);
+        emit_asm(".cond_end_"); emit_num(label); emit_asm(":\n");
+    } else if (node->type == AST_OR) {
+        // With short circuiting!
+        auto label = ++gen_label_counter;
+        generate_expression(node->binary.lhs);
+        // If left is true, we can short-circuit
+        emit_asm("\tcmp rax, 0\n");
+        emit_asm("\tje .or_right_"); emit_num(label); emit_asm("\n");
+        emit_asm("\tmov rax, 1\n");
+        emit_asm("\tjmp .or_end_"); emit_num(label); emit_asm("\n");
+        emit_asm(".or_right_"); emit_num(label); emit_asm(":\n");
+        generate_expression(node->binary.rhs);
+        // Booleanize the result
+        emit_asm("\tcmp rax, 0\n");
+        emit_asm("\tsetne al\n");
+        emit_asm(".or_end_"); emit_num(label); emit_asm(":\n");
+    } else if (node->type == AST_AND) {
+        auto label = ++gen_label_counter;
+        generate_expression(node->binary.lhs);
+        // If left is false, we can short-circuit
+        emit_asm("\tcmp rax, 0\n");
+        emit_asm("\tjne .and_right_"); emit_num(label); emit_asm("\n");
+        emit_asm("\tmov rax, 0\n");
+        emit_asm("\tjmp .and_end_"); emit_num(label); emit_asm("\n");
+        emit_asm(".and_right_"); emit_num(label); emit_asm(":\n");
+        generate_expression(node->binary.rhs);
+        // Booleanize the result
+        emit_asm("\tcmp rax, 0\n");
+        emit_asm("\tsetne al\n");
+        emit_asm(".and_end_"); emit_num(label); emit_asm(":\n");
     } else if (is_lvalue(node->type)) {
-        auto size = size_of_type(node->etype);
+        auto node_sz = size_of_type(node->etype);
         generate_lvalue_into_rax(node);
         if (is_float_type(node->etype)) {
             emit_asm("\tmovsd xmm0, [rax]\n");
-        } else if (size == 8) {
+        } else if (node_sz == 8) {
             emit_asm("\tmov rax, [rax]\n");
-        } else if (size == 4) {
+        } else if (node_sz == 4) {
             emit_asm("\tmovsxd rax, dword [rax]\n");
         } else {
             emit_asm3("\tmovsx rax, ", specifier_for_type(node->etype), " [rax]\n");
@@ -236,11 +286,11 @@ void generate_expression(Node *node) {
         char* u_op;
         switch (node->type) {
             case AST_EQ: s_op = "sete"; u_op = "sete"; break;
-            // case AST_LT: s_op = "setl"; u_op = "setb"; break;
-            // case AST_GT: s_op = "setg"; u_op = "seta"; break;
+            case AST_LT: s_op = "setl"; u_op = "setb"; break;
+            case AST_GT: s_op = "setg"; u_op = "seta"; break;
             case AST_NEQ: s_op = "setne"; u_op = "setne"; break;
-            // case AST_LEQ: s_op = "setle"; u_op = "setna"; break;
-            // case AST_GEQ: s_op = "setge"; u_op = "setnb"; break;
+            case AST_LEQ: s_op = "setle"; u_op = "setna"; break;
+            case AST_GEQ: s_op = "setge"; u_op = "setnb"; break;
 
             default: {
                 if (is_float_type(node->etype)) {
@@ -259,6 +309,23 @@ void generate_expression(Node *node) {
             emit_asm3("\t", s_op, " al\n");
         }
         emit_asm("\tmovzx rax, al\n");
+    } else if (node->type == AST_BWINV) {
+        generate_expression(node->expr);
+        emit_asm("\tnot rax\n");
+    } else if (node->type == AST_NEG) {
+        generate_expression(node->expr);
+        if (is_float_type(node->expr->etype)) {
+            emit_asm("\txorps xmm1, xmm1\n");
+            emit_asm("\tsubps xmm1, xmm0\n");
+            emit_asm("\tmovsd xmm0, xmm1\n");
+        } else {
+            emit_asm("\tneg rax\n");
+        }
+    } else if (node->type == AST_NOT) {
+        generate_expression(node->expr);
+        emit_asm("\tcmp rax, 0\n");
+        emit_asm("\tsete al\n");
+        emit_asm("\tmovzx rax, al\n");
     } else if (node->type == AST_ASSIGN) {
         auto var = node->assign.lhs;
         generate_lvalue_into_rax(var);
@@ -269,6 +336,19 @@ void generate_expression(Node *node) {
             emit_asm("\tmovsd [rcx], xmm0\n");
         } else {
             emit_asm3("\tmov [rcx], ", subregister_for_type(var->etype), "\n");
+        }
+    } else if (node->type == AST_FUNCTION_CALL) {
+        generate_function_call(node);
+    } else if (node->type == AST_CONVERT) {
+        if (is_int_type(node->etype) && is_float_type(node->expr->etype)) {
+            generate_expression(node->expr);
+            emit_asm("\tcvttsd2si rax, xmm0\n");
+        } else if (is_float_type(node->etype) && is_int_type(node->expr->etype)) {
+            generate_expression(node->expr);
+            emit_asm("\tcvtsi2sd xmm0, eax\n"); // TODO: Check if this is correct
+        } else {
+            std::cerr << "Unsupported conversion in generate_expression" << std::endl;
+            exit(1);
         }
     } else {
         std::cerr << "Unsupported type in generate_expression: " << node->type << std::endl;
@@ -505,8 +585,8 @@ void generate_program(Node *ast, FILE *file) {
         }
         emit_asm("0\n");
     }
-    // for (let i = 0; i < gen_float_literals.size; ++i) {
-    //     emit_asm("\tgf_"); emit_num(i);
-    //     emit_asm3(": dq ", gen_float_literals::at(i), "\n");
-    // }
+    for (auto i = 0; i < gen_float_literals.size(); ++i) {
+        emit_asm("\tgf_"); emit_num(i);
+        emit_asm3(": dq ", gen_float_literals.at(i), "\n");
+    }
 }

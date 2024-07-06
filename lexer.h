@@ -31,19 +31,44 @@ enum TokenType {
     TOKEN_WHILE,
     TOKEN_CONTINUE,
     TOKEN_BREAK,
+    TOKEN_SIZEOF,
+
+    NUM_KEYWORDS,
 
     // Literals
     TOKEN_INTLIT,
     TOKEN_STRINGLIT,
     TOKEN_IDENTIFIER,
+    TOKEN_FLOATLIT,
+    TOKEN_CHARLIT,
 
     // Operators
     TOKEN_STAR,
+    TOKEN_SLASH,
     TOKEN_PLUS,
+    TOKEN_PLUS_EQUAL,
+    TOKEN_PLUS_PLUS,
+    TOKEN_MINUS,
+    TOKEN_MINUS_EQUAL,
+    TOKEN_MINUS_MINUS,
     TOKEN_ASSIGN,
     TOKEN_EXCLAMATION,
     TOKEN_EQ,
     TOKEN_NEQ,
+    TOKEN_GEQ,
+    TOKEN_GT,
+    TOKEN_LEQ,
+    TOKEN_LT,
+    TOKEN_LSHIFT,
+    TOKEN_RSHIFT,
+    TOKEN_AMPERSAND,
+    TOKEN_AND,
+    TOKEN_BAR,
+    TOKEN_OR,
+    TOKEN_CARET,
+    TOKEN_PERCENT,
+    TOKEN_QUESTION,
+    TOKEN_TILDE,
 
     // Punctuation
     TOKEN_LPAREN,
@@ -53,11 +78,15 @@ enum TokenType {
     TOKEN_LBRACKET,
     TOKEN_RBRACKET,
     TOKEN_COLON,
+    TOKEN_COLON_COLON,
     TOKEN_SEMICOLON,
     TOKEN_COMMA,
+    TOKEN_DOT,
 
     // Misc
-    TOKEN_EOF
+    TOKEN_EOF,
+
+    NUM_TOKEN_TYPES,
 };
 
 struct Location;
@@ -130,8 +159,7 @@ struct Token {
 };
 
 inline bool is_literal_token(TokenType type) {
-    // TODO: Add floats
-    return type == TOKEN_INTLIT || type == TOKEN_STRINGLIT;
+    return type == TOKEN_INTLIT || type == TOKEN_STRINGLIT || type == TOKEN_CHARLIT || type == TOKEN_FLOATLIT;
 }
 
 #endif //LEXER_H

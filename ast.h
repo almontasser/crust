@@ -12,8 +12,8 @@
 struct Type;
 
 struct Variable {
-    char* name;
-    Type* type;
+    char *name;
+    Type *type;
     size_t offset;
 };
 
@@ -43,79 +43,109 @@ enum NodeType {
     AST_NEQ,
     AST_ASSIGN,
     AST_PLUS,
+    AST_CONDITIONAL,
+    AST_BWINV,
+    AST_MINUS,
+    AST_DIV,
+    AST_MOD,
+    AST_LSHIFT,
+    AST_RSHIFT,
+    AST_AND,
+    AST_BWAND,
+    AST_OR,
+    AST_BWOR,
+    AST_XOR,
+    AST_LT,
+    AST_LEQ,
+    AST_GT,
+    AST_GEQ,
 
     NUM_NODE_TYPES,
 };
 
 struct Node {
     NodeType type;
-    Type* etype;
+    Type *etype;
 
     union {
-        Node* expr;
+        Node *expr;
 
-        Variable * variable;
+        Variable *variable;
 
         struct {
-            char* name;
-            Node* body;
+            char *name;
+            Node *body;
             size_t max_locals_size;
-            std::vector<Variable*>* args;
+            std::vector<Variable *> *args;
         } function;
 
         struct {
-            std::vector<Node*>* children;
-            std::vector<Variable*>* locals;
+            std::vector<Node *> *children;
+            std::vector<Variable *> *locals;
             size_t locals_size;
         } block;
 
         struct {
             uint64_t as_int;
-            char* as_string;
+            char *as_string;
         } literal;
 
         struct {
-            Node* function;
-            std::vector<Node*>* args;
+            Node *function;
+            std::vector<Node *> *args;
         } call;
 
         struct {
             Variable var;
-            Node* init;
+            Node *init;
         } var_decl;
 
         struct {
-            Node* condition;
-            Node* body;
+            Node *condition;
+            Node *body;
             // for loop
-            Node* init;
-            Node* step;
+            Node *init;
+            Node *step;
         } loop;
 
         struct {
-            Node* lhs;
-            Node* rhs;
+            Node *lhs;
+            Node *rhs;
         } binary;
 
         struct {
-            Node* lhs;
-            Node* rhs;
+            Node *lhs;
+            Node *rhs;
         } assign;
+
+        struct {
+            Node *condition;
+            Node *then;
+            Node *els;
+        } conditional;
     };
 };
 
-Node* new_node(NodeType type);
-Node* convert_type(Type* to, Node* from_node);
+Node *new_node(NodeType type);
 
-Variable* new_variable(char* name, Type* type, size_t offset);
+Node *convert_type(Type *to, Node *from_node);
+
+Variable *new_variable(char *name, Type *type, size_t offset);
 
 bool is_lvalue(NodeType type);
-Node* decay_array_to_pointer(Node* node, Token* token);
-Node* type_check_unary(Node* node, Token* token);
-Node* type_check_binary(Node* node, Token* token);
+
+Node *decay_array_to_pointer(Node *node, Token *token);
+
+Node *type_check_unary(Node *node, Token *token);
+
+Node *type_check_binary(Node *node, Token *token);
+
 NodeType binary_token_to_op(TokenType type);
-Node* new_node_binop(NodeType type, Node* lhs, Node* rhs);
-Node* node_from_int_literal(uint64_t value);
+
+Node *new_node_binop(NodeType type, Node *lhs, Node *rhs);
+
+Node *node_from_int_literal(uint64_t value);
+
 bool is_binary_op(NodeType type);
 
 #endif //AST_H

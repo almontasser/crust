@@ -11,8 +11,6 @@
 #include "types.h"
 
 Node *new_node(NodeType type) {
-    static size_t counter = 0;
-
     const auto node = static_cast<Node *>(malloc(sizeof(Node)));
     node->type = type;
     return node;
@@ -78,7 +76,7 @@ Variable *new_variable(char *name, Type *type, size_t offset) {
 }
 
 bool is_lvalue(NodeType type) {
-    static_assert(NUM_NODE_TYPES == 24, "Exhaustive match in is_lvalue()");
+    static_assert(NUM_NODE_TYPES == 40, "Exhaustive match in is_lvalue()");
     if (type == AST_LOCAL_VAR) return true;
     if (type == AST_GLOBAL_VAR) return true;
     if (type == AST_MEMBER) return true;
@@ -90,16 +88,16 @@ Node *decay_array_to_pointer(Node *node, Token *token) {
     // We can only take the address of an lvalue, so we need to ensure that
     if (is_lvalue(node->type) && node->etype->base == TYPE_ARRAY) {
         // TODO: Implement this
-        // auto address = new_node(AST_ADDRESS_OF);
-        // address.unary = node;
-        // address = type_check_unary(address, token);
-        // node = address;
+        auto address = new_node(AST_ADDRESS_OF);
+        address->expr = node;
+        address = type_check_unary(address, token);
+        node = address;
     }
     return node;
 }
 
 Node *type_check_unary(Node *node, Token *token) {
-    static_assert(NUM_NODE_TYPES == 24, "Exhaustive match in type_check_unary()");
+    static_assert(NUM_NODE_TYPES == 40, "Exhaustive match in type_check_unary()");
 
     auto old_type = node->expr->etype;
 
@@ -147,7 +145,7 @@ Node *type_check_unary(Node *node, Token *token) {
 }
 
 Node *type_check_binary(Node *node, Token *token) {
-    static_assert(NUM_NODE_TYPES == 24, "Exhaustive match in type_check_binary()");
+    static_assert(NUM_NODE_TYPES == 40, "Exhaustive match in type_check_binary()");
 
     auto lhs = node->binary.lhs->etype;
     auto rhs = node->binary.rhs->etype;
@@ -199,7 +197,69 @@ Node *type_check_binary(Node *node, Token *token) {
                     << token->location->column << std::endl;
             exit(1);
         }
+    } else if (node->type == AST_MINUS) {
+        if (is_int_type(lhs) && is_int_type(rhs)) {
+            node->etype = new_type(TYPE_U64);
+        } else if (lhs->base == TYPE_POINTER && is_int_type(rhs)) {
+            node->etype = lhs;
+            // Pointer arithmetic
+            if (size_of_type(lhs->ptr) != 1) {
+                auto mul = new_node_binop(AST_MUL, node->binary.rhs, node_from_int_literal(size_of_type(lhs->ptr)));
+                node->binary.rhs = mul;
+            }
+        } else if (is_int_type(lhs) && rhs->base == TYPE_POINTER) {
+            node->etype = rhs;
+            // Pointer arithmetic
+            if (size_of_type(rhs->ptr) != 1) {
+                auto mul = new_node_binop(AST_MUL, node->binary.lhs, node_from_int_literal(size_of_type(rhs->ptr)));
+                node->binary.rhs = mul;
+            }
+        } else if (lhs->base == TYPE_POINTER && rhs->base == TYPE_POINTER) {
+            node->etype = new_type(TYPE_U64);
+            if (!types_equal(lhs->ptr, rhs->ptr)) {
+                std::cerr << "Cannot subtract pointers of different types at " << token->location->filename << token->
+                        location->line << ":" << token->location->column << std::endl;
+                exit(1);
+            }
+
+            // Pointer arithmetic! (Divide by size of element)
+            if (size_of_type(lhs->ptr) != 1) {
+                auto mul = new_node_binop(AST_MUL, node->binary.lhs, node_from_int_literal(size_of_type(lhs->ptr)));
+                node->binary.lhs = mul;
+            }
+        } else if (is_float_type(lhs) || is_float_type(rhs)) {
+            // TODO: Handle different sized floats
+            node->etype = new_type(TYPE_F64);
+            node->binary.lhs = convert_to_float(node->binary.lhs);
+            node->binary.rhs = convert_to_float(node->binary.rhs);
+        } else {
+            std::cerr << "Invalid types for subtraction at " << token->location->filename << token->location->line <<
+                    ":"
+                    << token->location->column << std::endl;
+            exit(1);
+        }
+    } else if (node->type == AST_MUL || node->type == AST_DIV || node->type == AST_MOD) {
+        if (is_int_type(lhs) && is_int_type(rhs)) {
+            node->etype = lhs; // TODO: Check for overflow
+        } else if (is_float_type(lhs) || is_float_type(rhs)) {
+            if (node->type == AST_MOD) {
+                std::cerr << "Cannot perform modulo on float types at " << token->location->filename << token->location
+                        ->line
+                        << ":" << token->location->column << std::endl;
+                exit(1);
+            }
+
+            // TODO: Handle different sized floats
+            node->etype = new_type(TYPE_F64);
+            node->binary.lhs = convert_to_float(node->binary.lhs);
+            node->binary.rhs = convert_to_float(node->binary.rhs);
+        } else {
+            std::cerr << "Invalid types for multiplication/division/modulo at " << token->location->filename << token->
+                    location->line << ":" << token->location->column << std::endl;
+            exit(1);
+        }
     } else {
+        // FIXME: This isn't very correct, but it's probably good enough for now
         node->etype = new_type(TYPE_U64);
         if (is_float_type(lhs) || is_float_type(rhs)) {
             node->binary.lhs = convert_to_float(node->binary.lhs);
@@ -211,40 +271,39 @@ Node *type_check_binary(Node *node, Token *token) {
 }
 
 NodeType binary_token_to_op(TokenType type) {
-    static_assert(NUM_NODE_TYPES == 24, "Exhaustive match in binary_token_to_op()");
+    static_assert(NUM_NODE_TYPES == 40, "Exhaustive match in binary_token_to_op()");
 
     if (type == TOKEN_PLUS) return AST_PLUS;
-    // if (type == TOKEN_MINUS)     return AST_MINUS;
+    if (type == TOKEN_MINUS) return AST_MINUS;
     if (type == TOKEN_STAR) return AST_MUL;
-    // if (type == TOKEN_SLASH)     return AST_DIV;
-    // if (type == TOKEN_PERCENT)   return AST_MOD;
-    // if (type == TOKEN_LSHIFT)    return AST_LSHIFT;
-    // if (type == TOKEN_RSHIFT)    return AST_RSHIFT;
-    // if (type == TOKEN_AND)       return AST_AND;
-    // if (type == TOKEN_OR)        return AST_OR;
-    // if (type == TOKEN_XOR)       return AST_XOR;
+    if (type == TOKEN_SLASH) return AST_DIV;
+    if (type == TOKEN_PERCENT) return AST_MOD;
+    if (type == TOKEN_LSHIFT) return AST_LSHIFT;
+    if (type == TOKEN_RSHIFT) return AST_RSHIFT;
+    if (type == TOKEN_AND) return AST_AND;
+    if (type == TOKEN_OR) return AST_OR;
     if (type == TOKEN_EQ) return AST_EQ;
     if (type == TOKEN_NEQ) return AST_NEQ;
-    // if (type == TOKEN_LT)        return AST_LT;
-    // if (type == TOKEN_LEQ)       return AST_LEQ;
-    // if (type == TOKEN_GT)        return AST_GT;
-    // if (type == TOKEN_GEQ)       return AST_GEQ;
-    // if (type == TOKEN_AMPERSAND) return AST_BWAND;
-    // if (type == TOKEN_BAR)       return AST_BWOR;
-    // if (type == TOKEN_CARET)     return AST_XOR;
+    if (type == TOKEN_LT) return AST_LT;
+    if (type == TOKEN_LEQ) return AST_LEQ;
+    if (type == TOKEN_GT) return AST_GT;
+    if (type == TOKEN_GEQ) return AST_GEQ;
+    if (type == TOKEN_AMPERSAND) return AST_BWAND;
+    if (type == TOKEN_BAR) return AST_BWOR;
+    if (type == TOKEN_CARET) return AST_XOR;
 
     std::cerr << "Unknown binary operator: " << type << std::endl;
     exit(1);
 }
 
-Node * new_node_binop(NodeType type, Node *lhs, Node *rhs) {
+Node *new_node_binop(NodeType type, Node *lhs, Node *rhs) {
     auto node = new_node(type);
     node->binary.lhs = lhs;
     node->binary.rhs = rhs;
     return type_check_binary(node, nullptr);
 }
 
-Node * node_from_int_literal(uint64_t value) {
+Node *node_from_int_literal(uint64_t value) {
     auto node = new_node(AST_LITERAL);
     node->literal.as_int = value;
     node->etype = new_type(TYPE_U64);
@@ -252,24 +311,24 @@ Node * node_from_int_literal(uint64_t value) {
 }
 
 bool is_binary_op(NodeType type) {
-    static_assert(NUM_NODE_TYPES == 24, "Exhaustive match in is_binary_op");
+    static_assert(NUM_NODE_TYPES == 40, "Exhaustive match in is_binary_op");
     if (type == AST_PLUS) return true;
-    // if (type == AST_MINUS) return true;
+    if (type == AST_MINUS) return true;
     if (type == AST_MUL) return true;
-    // if (type == AST_DIV) return true;
-    // if (type == AST_MOD) return true;
-    // if (type == AST_LSHIFT) return true;
-    // if (type == AST_RSHIFT) return true;
-    // if (type == AST_AND) return true;
-    // if (type == AST_BWAND) return true;
-    // if (type == AST_OR) return true;
-    // if (type == AST_BWOR) return true;
-    // if (type == AST_XOR) return true;
+    if (type == AST_DIV) return true;
+    if (type == AST_MOD) return true;
+    if (type == AST_LSHIFT) return true;
+    if (type == AST_RSHIFT) return true;
+    if (type == AST_AND) return true;
+    if (type == AST_BWAND) return true;
+    if (type == AST_OR) return true;
+    if (type == AST_BWOR) return true;
+    if (type == AST_XOR) return true;
     if (type == AST_EQ) return true;
     if (type == AST_NEQ) return true;
-    // if (type == AST_LT) return true;
-    // if (type == AST_LEQ) return true;
-    // if (type == AST_GT) return true;
-    // if (type == AST_GEQ) return true;
+    if (type == AST_LT) return true;
+    if (type == AST_LEQ) return true;
+    if (type == AST_GT) return true;
+    if (type == AST_GEQ) return true;
     return false;
 }

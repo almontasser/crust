@@ -32,7 +32,7 @@ size_t align_up(size_t val, int align) {
 void builtin_create_syscall(const char *name, int num_args) {
     const auto node = new_node(AST_BUILTIN);
     node->etype = new_type(TYPE_ANY);
-    node->function.name = static_cast<char*>(malloc(strlen(name) + 1));
+    node->function.name = static_cast<char *>(malloc(strlen(name) + 1));
     strcpy(node->function.name, name);
     node->function.args = new std::vector<Variable *>();
     node->function.args->push_back(new_variable("val", new_type(TYPE_U64), 0)); // syscall number
@@ -146,7 +146,7 @@ Variable *find_local_variable(char *name) {
     if (current_function == nullptr) return nullptr;
 
     auto n = block_stack.size();
-    for (int i = n-1; i >= 0; --i) {
+    for (int i = n - 1; i >= 0; --i) {
         auto block = block_stack[i];
         for (auto var: *block->block.locals) {
             if (strcmp(var->name, name) == 0) {
@@ -262,7 +262,14 @@ Node *parse_literal(Lexer *lexer) {
             node->literal.as_string = token->value.as_string;
             node->etype = new_ptr_type(TYPE_U8); // TODO: Maybe add char type
             break;
-        // TODO: Add floats
+        case TOKEN_CHARLIT:
+            node->literal.as_int = token->value.as_int;
+            node->etype = new_type(TYPE_U8);
+            break;
+        case TOKEN_FLOATLIT:
+            node->literal.as_string = token->value.as_string;
+            node->etype = new_type(TYPE_F64);
+            break;
         default:
             std::cerr << "Unknown literal type: " << token->type << " at " << token->location->filename << ":" << token
                     ->
@@ -276,10 +283,74 @@ Node *parse_factor(Lexer *lexer) {
     Node *expr = nullptr;
 
     auto token = lexer->peek();
-    if (is_literal_token(token->type)) {
+    if (token->type == TOKEN_MINUS) {
+        lexer->next();
+        expr = new_node(AST_NEG);
+        expr->expr = parse_factor(lexer);
+        expr = type_check_unary(expr, token);
+    } else if (token->type == TOKEN_TILDE) {
+        lexer->next();
+        expr = new_node(AST_BWINV);
+        expr->expr = parse_factor(lexer);
+        expr = type_check_unary(expr, token);
+    } else if (token->type == TOKEN_PLUS_PLUS) {
+        // ++x => x = x + 1
+        lexer->next();
+        expr = new_node(AST_ASSIGN);
+        expr->assign.lhs = parse_factor(lexer);
+        if (!is_lvalue(expr->assign.lhs->type)) {
+            std::cerr << "Expected lvalue at " << token->location->filename << ":" << token->location->line << ":" << token
+                    ->location->column << std::endl;
+            exit(1);
+        }
+        auto plus = new_node(AST_PLUS);
+        plus->binary.lhs = expr->assign.lhs;
+        plus->binary.rhs = node_from_int_literal(1);
+        expr->assign.rhs = type_check_binary(plus, token);
+        expr->etype = expr->assign.lhs->etype;
+    } else if (token->type == TOKEN_MINUS_MINUS) {
+        lexer->next();
+        expr = new_node(AST_ASSIGN);
+        expr->assign.lhs = parse_factor(lexer);
+        if (!is_lvalue(expr->assign.lhs->type)) {
+            std::cerr << "Expected lvalue at " << token->location->filename << ":" << token->location->line << ":" << token
+                    ->location->column << std::endl;
+            exit(1);
+        }
+        auto minus = new_node(AST_MINUS);
+        minus->binary.lhs = expr->assign.lhs;
+        minus->binary.rhs = node_from_int_literal(1);
+        expr->assign.rhs = type_check_binary(minus, token);
+        expr->etype = expr->assign.lhs->etype;
+    } else if (token->type == TOKEN_SIZEOF) {
+        lexer->next();
+        lexer->expect(TOKEN_LPAREN);
+        auto type = parse_type(lexer);
+        lexer->expect(TOKEN_RPAREN);
+        expr = node_from_int_literal(size_of_type(type));
+    } else if (token->type == TOKEN_EXCLAMATION) {
+        lexer->next();
+        expr = new_node(AST_NOT);
+        expr->expr = parse_factor(lexer);
+        expr = type_check_unary(expr, token);
+    } else if (token->type == TOKEN_LPAREN) {
+        lexer->next();
+        expr = parse_expression(lexer);
+        lexer->expect(TOKEN_RPAREN);
+    } else if (is_literal_token(token->type)) {
         expr = parse_literal(lexer);
     } else if (token->type == TOKEN_IDENTIFIER) {
         expr = parse_identifier(lexer);
+    } else if (token->type == TOKEN_AMPERSAND) {
+        lexer->next();
+        expr = new_node(AST_ADDRESS_OF);
+        expr->expr = parse_factor(lexer);
+        if (!is_lvalue(expr->expr->type)) {
+            std::cerr << "Expected lvalue at " << token->location->filename << ":" << token->location->line << ":" << token
+                    ->location->column << std::endl;
+            exit(1);
+        }
+        expr = type_check_unary(expr, token);
     } else if (token->type == TOKEN_STAR) {
         lexer->next();
 
@@ -294,10 +365,44 @@ Node *parse_factor(Lexer *lexer) {
         expr = new_node(AST_DEREF);
         expr->expr = subexp;
         expr = type_check_unary(expr, token);
-    } else {
+    } else { // TODO: implement new keyword
         std::cerr << "Unexpected token: " << token->type << " at " << token->location->filename << ":" << token->
                 location->line << ":" << token->location->column << std::endl;
         exit(1);
+    }
+
+    while (true) {
+        token = lexer->peek();
+
+        if (token->type == TOKEN_LBRACKET) {
+            if (expr->etype->base != TYPE_POINTER) {
+                std::cerr << "Cannot index non-pointer type at " << token->location->filename << ":" << token->location
+                        ->line << ":" << token->location->column << std::endl;
+                exit(1);
+            }
+            token = lexer->next();
+            auto index = parse_expression(lexer);
+            auto offset = new_node(AST_PLUS);
+            offset->binary.lhs = expr;
+            offset->binary.rhs = index;
+            offset = type_check_binary(offset, token);
+
+            expr = new_node(AST_DEREF);
+            expr->expr = offset;
+            expr = type_check_unary(expr, token);
+        } else if (token->type == TOKEN_DOT) {
+            // TODO: implement struct access
+            std::cerr << "Struct access not implemented at " << token->location->filename << ":" << token->location->line
+                    << ":" << token->location->column << std::endl;
+            exit(1);
+        } else if (token->type == TOKEN_COLON_COLON) {
+            // TODO: implement struct access
+            std::cerr << "Namespace access not implemented at " << token->location->filename << ":" << token->location->line
+                    << ":" << token->location->column << std::endl;
+            exit(1);
+        } else {
+            break;
+        }
     }
 
     return expr;
@@ -305,15 +410,26 @@ Node *parse_factor(Lexer *lexer) {
 
 Node *parse_term(Lexer *lexer) {
     auto lhs = parse_factor(lexer);
-    // TODO: parse TOKEN_STAR, TOKEN_SLASH, TOKEN_PERCENT
+    // TODO: check precedence
+    auto token = lexer->peek();
+    while (token->type == TOKEN_STAR || token->type == TOKEN_SLASH || token->type == TOKEN_PERCENT) {
+        lexer->next();
+        auto op = new_node(binary_token_to_op(token->type));
+        auto rhs = parse_factor(lexer);
+        op->binary.lhs = lhs;
+        op->binary.rhs = rhs;
+        lhs = type_check_binary(op, token);
+        token = lexer->peek();
+    }
     return lhs;
 }
 
 Node *parse_additive(Lexer *lexer) {
     auto lhs = parse_term(lexer);
-    // TODO: parse TOKEN_MINUS, TOKEN_LSHIFT, TOKEN_RSHIFT
+    // TODO: check precedence
     auto token = lexer->peek();
-    while (token->type == TOKEN_PLUS) {
+    while (token->type == TOKEN_PLUS || token->type == TOKEN_MINUS || token->type == TOKEN_LSHIFT || token->type ==
+           TOKEN_RSHIFT) {
         lexer->next();
         auto op = new_node(binary_token_to_op(token->type));
         auto rhs = parse_term(lexer);
@@ -327,7 +443,16 @@ Node *parse_additive(Lexer *lexer) {
 
 Node *parse_relational(Lexer *lexer) {
     auto lhs = parse_additive(lexer);
-    // TODO: parse TOKEN_LT, TOKEN_GT, TOKEN_LE, TOKEN_GE
+    auto token = lexer->peek();
+    while (token->type == TOKEN_LT || token->type == TOKEN_GT || token->type == TOKEN_LEQ || token->type == TOKEN_GEQ) {
+        lexer->next();
+        auto op = new_node(binary_token_to_op(token->type));
+        auto rhs = parse_additive(lexer);
+        op->binary.lhs = lhs;
+        op->binary.rhs = rhs;
+        lhs = type_check_binary(op, token);
+        token = lexer->peek();
+    }
     return lhs;
 }
 
@@ -348,42 +473,107 @@ Node *parse_equality(Lexer *lexer) {
 
 Node *parse_and(Lexer *lexer) {
     auto lhs = parse_equality(lexer);
-    // TODO: parse TOKEN_AMPERSAND
+    auto token = lexer->peek();
+    while (token->type == TOKEN_AMPERSAND) {
+        lexer->next();
+        auto op = new_node(binary_token_to_op(token->type));
+        auto rhs = parse_equality(lexer);
+        op->binary.lhs = lhs;
+        op->binary.rhs = rhs;
+        lhs = type_check_binary(op, token);
+        token = lexer->peek();
+    }
     return lhs;
 }
 
 Node *parse_exclusive_or(Lexer *lexer) {
     auto lhs = parse_and(lexer);
-    // TODO: parse TOKEN_CARET
+    auto token = lexer->peek();
+    while (token->type == TOKEN_CARET) {
+        lexer->next();
+        auto op = new_node(binary_token_to_op(token->type));
+        auto rhs = parse_and(lexer);
+        op->binary.lhs = lhs;
+        op->binary.rhs = rhs;
+        lhs = type_check_binary(op, token);
+        token = lexer->peek();
+    }
     return lhs;
 }
 
 Node *parse_inclusive_or(Lexer *lexer) {
     auto lhs = parse_exclusive_or(lexer);
-    // TODO: parse TOKEN_BAR
+    auto token = lexer->peek();
+    while (token->type == TOKEN_BAR) {
+        lexer->next();
+        auto op = new_node(binary_token_to_op(token->type));
+        auto rhs = parse_exclusive_or(lexer);
+        op->binary.lhs = lhs;
+        op->binary.rhs = rhs;
+        lhs = type_check_binary(op, token);
+        token = lexer->peek();
+    }
     return lhs;
 }
 
 Node *parse_logical_and(Lexer *lexer) {
     auto lhs = parse_inclusive_or(lexer);
-    // TODO: parse TOKEN_AND
+    auto token = lexer->peek();
+    while (token->type == TOKEN_AND) {
+        lexer->next();
+        auto op = new_node(binary_token_to_op(token->type));
+        auto rhs = parse_inclusive_or(lexer);
+        op->binary.lhs = lhs;
+        op->binary.rhs = rhs;
+        lhs = type_check_binary(op, token);
+        token = lexer->peek();
+    }
     return lhs;
 }
 
 Node *parse_logical_or(Lexer *lexer) {
     auto lhs = parse_logical_and(lexer);
-    // TODO: parse TOKEN_OR
+    auto token = lexer->peek();
+    while (token->type == TOKEN_OR) {
+        lexer->next();
+        auto op = new_node(binary_token_to_op(token->type));
+        auto rhs = parse_logical_and(lexer);
+        op->binary.lhs = lhs;
+        op->binary.rhs = rhs;
+        lhs = type_check_binary(op, token);
+        token = lexer->peek();
+    }
     return lhs;
 }
 
-Node *prase_conditional_expression(Lexer *lexer) {
+Node *parse_conditional_expression(Lexer *lexer) {
     auto lhs = parse_logical_or(lexer);
-    // TODO: parse ternary operator ?:
+    auto token = lexer->peek();
+    while (token->type == TOKEN_QUESTION) {
+        lexer->next();
+        auto then_expr = parse_expression(lexer);
+        lexer->expect(TOKEN_COLON);
+        auto else_expr = parse_expression(lexer);
+
+        auto cond = new_node(AST_CONDITIONAL);
+        cond->conditional.condition = lhs;
+        cond->conditional.then = then_expr;
+        cond->conditional.els = else_expr;
+
+        if (!types_equal(then_expr->etype, else_expr->etype)) {
+            std::cerr << "Types in conditional expression do not match at " << token->location->filename << ":" << token
+                    ->location->line << ":" << token->location->column << std::endl;
+            exit(1);
+        }
+
+        lhs = cond;
+        lhs->etype = then_expr->etype;
+    }
     return lhs;
 }
 
 Node *parse_expression(Lexer *lexer) {
-    auto lhs = prase_conditional_expression(lexer);
+    auto lhs = parse_conditional_expression(lexer);
     if (is_lvalue(lhs->type)) {
         auto token = lexer->peek();
         if (token->type == TOKEN_ASSIGN) {
@@ -631,50 +821,65 @@ void parse_function_params(Lexer *lexer, Node *func) {
     }
 }
 
-Node *parse_function(Lexer *lexer) {
+Node *parse_function(Lexer *lexer, bool first_pass) {
     lexer->expect(TOKEN_FN);
     const auto name = lexer->expect(TOKEN_IDENTIFIER);
 
-    const auto func = new_node(AST_FUNCTION);
-    func->function.name = name->value.as_string;
+    Node* func;
+    if (first_pass) {
+        func = new_node(AST_FUNCTION);
+        func->function.name = name->value.as_string;
 
-    // TODO: Check if function exists
-    if (identifier_exists(func->function.name)) {
-        std::cerr << "Function " << func->function.name << " already exists" << std::endl;
-        exit(1);
+        if (identifier_exists(name->value.as_string)) {
+            std::cerr << "Function " << name->value.as_string << " already exists" << std::endl;
+            exit(1);
+        } else {
+            all_functions.push_back(func);
+        }
+
+        current_function = func;
+
+        lexer->expect(TOKEN_LPAREN);
+        parse_function_params(lexer, func);
+        lexer->expect(TOKEN_RPAREN);
+
+        auto token = lexer->peek();
+        if (token->type == TOKEN_COLON) {
+            lexer->next();
+            func->etype = parse_type(lexer);
+        } else {
+            func->etype = new_type(TYPE_VOID);
+        }
+
+        // Skip function body
+        lexer->expect(TOKEN_LBRACE);
+        auto lbrace_count = 1;
+        while (lbrace_count > 0) {
+            token = lexer->next();
+            if (token->type == TOKEN_LBRACE) {
+                lbrace_count++;
+            } else if (token->type == TOKEN_RBRACE) {
+                lbrace_count--;
+            }
+        }
+
+        return func;
     } else {
-        all_functions.push_back(func);
+        func = find_function(name->value.as_string, all_functions);
+
+        current_function = func;
+
+        // Skip function parameters and return type
+        auto token = lexer->peek();
+        while (token->type != TOKEN_LBRACE) {
+            lexer->next();
+            token = lexer->peek();
+        }
+
+        func->function.body = parse_block(lexer);
+
+        return nullptr;
     }
-
-    current_function = func;
-
-    lexer->expect(TOKEN_LPAREN);
-    parse_function_params(lexer, func);
-    lexer->expect(TOKEN_RPAREN);
-
-    auto token = lexer->peek();
-    if (token->type == TOKEN_COLON) {
-        lexer->next();
-        func->etype = parse_type(lexer);
-    } else {
-        func->etype = new_type(TYPE_VOID);
-    }
-
-    func->function.body = parse_block(lexer);
-
-    // // Skip function body
-    // lexer->expect(TOKEN_LBRACE);
-    // auto lbrace_count = 1;
-    // while (lbrace_count > 0) {
-    //     token = lexer->next();
-    //     if (token->type == TOKEN_LBRACE) {
-    //         lbrace_count++;
-    //     } else if (token->type == TOKEN_RBRACE) {
-    //         lbrace_count--;
-    //     }
-    // }
-
-    return func;
 }
 
 Node *parse_program(Lexer *lexer) {
@@ -685,41 +890,49 @@ Node *parse_program(Lexer *lexer) {
 
     lexer_stack.push_back(lexer);
 
-    // first pass
-    auto token = lexer->peek();
-    while (token->type != TOKEN_EOF) {
-        Node *child = nullptr;
-        if (token->type == TOKEN_IMPORT) {
-            lexer->next();
-            auto path = lexer->expect(TOKEN_STRINGLIT);
+    bool first_pass = true;
+    while (true) {
+        auto token = lexer->peek();
+        while (token->type != TOKEN_EOF) {
+            Node *child = nullptr;
+            if (token->type == TOKEN_IMPORT) {
+                lexer->next();
+                auto path = lexer->expect(TOKEN_STRINGLIT);
 
-            auto already_imported = false;
-            const auto absolute_path = canonicalize_file_name(path->value.as_string);
-            for (const auto l: lexer_stack) {
-                if (strcmp(l->filename, absolute_path) == 0) {
-                    already_imported = true;
-                    break;
+                auto already_imported = false;
+                const auto absolute_path = canonicalize_file_name(path->value.as_string);
+                for (const auto l: lexer_stack) {
+                    if (strcmp(l->filename, absolute_path) == 0) {
+                        already_imported = true;
+                        break;
+                    }
                 }
+
+                if (!already_imported) {
+                    lexer_stack.push_back(Lexer::create_from_file(absolute_path));
+                    lexer = lexer_stack[++current_lexer_index];
+                }
+            } else if (token->type == TOKEN_FN) {
+                child = parse_function(lexer, first_pass);
             }
 
-            if (!already_imported) {
-                lexer_stack.push_back(Lexer::create_from_file(absolute_path));
-                lexer = lexer_stack[++current_lexer_index];
+            if (child != nullptr) {
+                node->block.children->push_back(child);
             }
-        } else if (token->type == TOKEN_FN) {
-            child = parse_function(lexer);
-            std::cout << "Function: " << child->function.name << std::endl;
-        }
 
-        if (child != nullptr) {
-            node->block.children->push_back(child);
-        }
-
-        token = lexer->peek();
-        while (token->type == TOKEN_EOF && current_lexer_index > 0) {
-            current_lexer_index--;
-            lexer = lexer_stack[current_lexer_index];
             token = lexer->peek();
+            while (token->type == TOKEN_EOF && current_lexer_index > 0) {
+                current_lexer_index--;
+                lexer = lexer_stack[current_lexer_index];
+                token = lexer->peek();
+            }
+        }
+
+        if (first_pass) {
+            first_pass = false;
+            lexer->reset();
+        } else {
+            break;
         }
     }
 

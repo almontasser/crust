@@ -4,8 +4,37 @@
 #include "codegen.h"
 #include "lexer.h"
 #include "parser.h"
+#include "sys/wait.h"
 
-int main() {
+void run_command_env(char** args, char** envp, bool echo) {
+    if (echo) {
+        std::cout << "[+]";
+        for (int i = 0; args[i] != nullptr; i++) {
+            std::cout << " " << args[i];
+        }
+        std::cout << std::endl;
+    }
+
+    auto pid = fork();
+    if (pid == 0) {
+        execve(args[0], args, envp);
+        std::cerr << "Failed to exec: " << args[0] << std::endl;
+        exit(1);
+    }
+
+    int status;
+    if (wait4(-1, &status, 0, nullptr) < 0) {
+        std::cerr << "Failed to wait for child process" << std::endl;
+        exit(1);
+    }
+
+    if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+        std::cerr << "Command failed: " << args[0] << std::endl;
+        exit(1);
+    }
+}
+
+int main(char** argv, int argc, char** envp) {
     char *filename = "../tests/test01.cr";
     const auto lexer = Lexer::create_from_file(filename);
     if (lexer == nullptr) {
@@ -43,10 +72,11 @@ int main() {
     cmd_args[5] = asm_filename;
     cmd_args[6] = nullptr;
 
-    if (fork() == 0) {
-        execv("/usr/bin/env", cmd_args);
-        std::cerr << "Failed to exec yasm" << std::endl;
-    }
+    // if (fork() == 0) {
+    //     execv("/usr/bin/env", cmd_args);
+    //     std::cerr << "Failed to exec yasm" << std::endl;
+    // }
+    run_command_env(cmd_args, envp, true);
 
     // link the object file
     if (OS_IS_MACOS)
@@ -62,18 +92,20 @@ int main() {
         cmd_args[5] = nullptr;
     cmd_args[6] = nullptr;
 
-    if (fork() == 0) {
-        execv("/usr/bin/env", cmd_args);
-        std::cerr << "Failed to exec linker" << std::endl;
-    }
+    // if (fork() == 0) {
+    //     execv("/usr/bin/env", cmd_args);
+    //     std::cerr << "Failed to exec linker" << std::endl;
+    // }
+    run_command_env(cmd_args, envp, true);
 
     // execute the object file
     cmd_args[0] = executable_filename;
     cmd_args[1] = nullptr;
 
-    if (fork() == 0) {
-        execv("/usr/bin/env", cmd_args);
-        std::cerr << "Failed to exec object file" << std::endl;
-    }
+    // if (fork() == 0) {
+    //     execv("/usr/bin/env", cmd_args);
+    //     std::cerr << "Failed to exec object file" << std::endl;
+    // }
+    run_command_env(cmd_args, envp, true);
     return 0;
 }

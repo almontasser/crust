@@ -40,6 +40,8 @@ Lexer *Lexer::create_from_file(const char *filename) {
 }
 
 const char *token_type_to_string(const TokenType type) {
+    static_assert(NUM_TOKEN_TYPES == 65, "Exhaustive match in token_type_to_string()");
+
     switch (type) {
         case TOKEN_FN: return "TOKEN_FN";
         case TOKEN_RETURN: return "TOKEN_RETURN";
@@ -61,15 +63,36 @@ const char *token_type_to_string(const TokenType type) {
         case TOKEN_WHILE: return "TOKEN_WHILE";
         case TOKEN_CONTINUE: return "TOKEN_CONTINUE";
         case TOKEN_BREAK: return "TOKEN_BREAK";
+        case TOKEN_SIZEOF: return "TOKEN_SIZEOF";
         case TOKEN_INTLIT: return "TOKEN_INTLIT";
         case TOKEN_IDENTIFIER: return "TOKEN_IDENTIFIER";
         case TOKEN_STRINGLIT: return "TOKEN_STRINGLIT";
         case TOKEN_STAR: return "TOKEN_STAR";
+        case TOKEN_SLASH: return "TOKEN_SLASH";
         case TOKEN_PLUS: return "TOKEN_PLUS";
+        case TOKEN_PLUS_EQUAL: return "TOKEN_PLUS_EQUAL";
+        case TOKEN_PLUS_PLUS: return "TOKEN_PLUS_PLUS";
+        case TOKEN_MINUS: return "TOKEN_MINUS";
+        case TOKEN_MINUS_EQUAL: return "TOKEN_MINUS_EQUAL";
+        case TOKEN_MINUS_MINUS: return "TOKEN_MINUS_MINUS";
         case TOKEN_ASSIGN: return "TOKEN_ASSIGN";
         case TOKEN_EXCLAMATION: return "TOKEN_EXCLAMATION";
         case TOKEN_EQ: return "TOKEN_EQ";
         case TOKEN_NEQ: return "TOKEN_NEQ";
+        case TOKEN_GEQ: return "TOKEN_GEQ";
+        case TOKEN_GT: return "TOKEN_GT";
+        case TOKEN_LEQ: return "TOKEN_LEQ";
+        case TOKEN_LT: return "TOKEN_LT";
+        case TOKEN_LSHIFT: return "TOKEN_LSHIFT";
+        case TOKEN_RSHIFT: return "TOKEN_RSHIFT";
+        case TOKEN_AMPERSAND: return "TOKEN_AMPERAND";
+        case TOKEN_AND: return "TOKEN_AND";
+        case TOKEN_BAR: return "TOKEN_BAR";
+        case TOKEN_OR: return "TOKEN_OR";
+        case TOKEN_CARET: return "TOKEN_CARET";
+        case TOKEN_PERCENT: return "TOKEN_PERCENT";
+        case TOKEN_QUESTION: return "TOKEN_QUESTION";
+        case TOKEN_TILDE: return "TOKEN_TILDE";
         case TOKEN_LPAREN: return "TOKEN_LPAREN";
         case TOKEN_RPAREN: return "TOKEN_RPAREN";
         case TOKEN_LBRACE: return "TOKEN_LBRACE";
@@ -77,8 +100,10 @@ const char *token_type_to_string(const TokenType type) {
         case TOKEN_LBRACKET: return "TOKEN_LBRACKET";
         case TOKEN_RBRACKET: return "TOKEN_RBRACKET";
         case TOKEN_COLON: return "TOKEN_COLON";
+        case TOKEN_COLON_COLON: return "TOKEN_COLON_COLON";
         case TOKEN_SEMICOLON: return "TOKEN_SEMICOLON";
         case TOKEN_COMMA: return "TOKEN_COMMA";
+        case TOKEN_DOT: return "TOKEN_DOT";
         case TOKEN_EOF: return "TOKEN_EOF";
     }
 
@@ -124,19 +149,71 @@ Token *Lexer::next() {
                 break;
 
             case '*': return make_token(TOKEN_STAR, 1);
-            case '+': return make_token(TOKEN_PLUS, 1);
+            case '/': return make_token(TOKEN_SLASH, 1);
+            case '+': {
+                if (source[position + 1] == '+') {
+                    return make_token(TOKEN_PLUS_PLUS, 2);
+                }
+                if (source[position + 1] == '=') {
+                    return make_token(TOKEN_PLUS_EQUAL, 2);
+                }
+                return make_token(TOKEN_PLUS, 1);
+            }
+            case '-' : {
+                if (source[position + 1] == '-') {
+                    return make_token(TOKEN_MINUS_MINUS, 2);
+                }
+                if (source[position + 1] == '=') {
+                    return make_token(TOKEN_MINUS_EQUAL, 2);
+                }
+                return make_token(TOKEN_MINUS, 1);
+            }
             case '!': {
-                if (source[position+1] == '=') {
+                if (source[position + 1] == '=') {
                     return make_token(TOKEN_NEQ, 2);
                 }
                 return make_token(TOKEN_EXCLAMATION, 1);
             }
             case '=': {
-                if (source[position+1] == '=') {
+                if (source[position + 1] == '=') {
                     return make_token(TOKEN_EQ, 2);
                 }
                 return make_token(TOKEN_ASSIGN, 1);
             }
+            case '>': {
+                if (source[position + 1] == '=') {
+                    return make_token(TOKEN_GEQ, 2);
+                }
+                if (source[position + 1] == '>') {
+                    return make_token(TOKEN_RSHIFT, 2);
+                }
+                return make_token(TOKEN_GT, 1);
+            }
+            case '<': {
+                if (source[position + 1] == '=') {
+                    return make_token(TOKEN_LEQ, 2);
+                }
+                if (source[position + 1] == '<') {
+                    return make_token(TOKEN_LSHIFT, 2);
+                }
+                return make_token(TOKEN_LT, 1);
+            }
+            case '&': {
+                if (source[position + 1] == '&') {
+                    return make_token(TOKEN_AND, 2);
+                }
+                return make_token(TOKEN_AMPERSAND, 1);
+            }
+            case '|': {
+                if (source[position + 1] == '|') {
+                    return make_token(TOKEN_OR, 2);
+                }
+                return make_token(TOKEN_BAR, 1);
+            }
+            case '^': return make_token(TOKEN_CARET, 1);
+            case '%': return make_token(TOKEN_PERCENT, 1);
+            case '?': return make_token(TOKEN_QUESTION, 1);
+            case '~': return make_token(TOKEN_TILDE, 1);
 
             case '(': return make_token(TOKEN_LPAREN, 1);
             case ')': return make_token(TOKEN_RPAREN, 1);
@@ -144,21 +221,74 @@ Token *Lexer::next() {
             case '}': return make_token(TOKEN_RBRACE, 1);
             case '[': return make_token(TOKEN_LBRACKET, 1);
             case ']': return make_token(TOKEN_RBRACKET, 1);
-            case ':': return make_token(TOKEN_COLON, 1);
+            case ':': {
+                if (source[position + 1] == ':') {
+                    return make_token(TOKEN_COLON_COLON, 2);
+                }
+                return make_token(TOKEN_COLON, 1);
+            }
             case ';': return make_token(TOKEN_SEMICOLON, 1);
             case ',': return make_token(TOKEN_COMMA, 1);
+            case '.': return make_token(TOKEN_DOT, 1);
 
             default: {
                 if (isdigit(c)) {
                     size_t count = 1;
+                    bool is_float = false;
+                    size_t value = 0;
+
+                    // Hexadecimal
+                    if (source[position] == '0' && source[position + 1] == 'x') {
+                        count += 2;
+                        while (isxdigit(source[position + count])) {
+                            count++;
+                        }
+                        value = std::stoi(std::string(source + position, count), nullptr, 16);
+                        // Octal 0 prefixed
+                    } else if (source[position] == '0' && isdigit(source[position + 1])) {
+                        while (isdigit(source[position + count])) {
+                            count++;
+                        }
+                        value = std::stoi(std::string(source + position, count), nullptr, 8);
+                        // Binary 0b prefixed
+                    } else if (source[position] == '0' && source[position + 1] == 'b') {
+                        count += 2;
+                        while (source[position + count] == '0' || source[position + count] == '1') {
+                            count++;
+                        }
+                        value = std::stoi(std::string(source + position, count), nullptr, 2);
+                        // Base 10
+                    } else {
+                        while (position + count < strlen(source) && isdigit(source[position + count])) {
+                            count++;
+                        }
+                        if (position + count < strlen(source) && source[position + count] == '.') {
+                            is_float = true;
+                            count++;
+                            while (position + count < strlen(source) && isdigit(source[position + count])) {
+                                count++;
+                            }
+                        } else {
+                            value = std::stoi(std::string(source + position, count));
+                        }
+                    }
+
                     while (isdigit(source[position + count])) {
                         count++;
                     }
 
-                    const auto value = std::stoi(std::string(source + position, count));
-                    const auto token = make_token(TOKEN_INTLIT, count);
-                    token->value.as_int = value;
-                    return token;
+                    if (!is_float) {
+                        const auto token = make_token(TOKEN_INTLIT, count);
+                        token->value.as_int = value;
+                        return token;
+                    } else {
+                        char* float_str = static_cast<char *>(malloc(count + 1));
+                        strncpy(float_str, source + position, count);
+                        float_str[count] = '\0';
+                        const auto token = make_token(TOKEN_FLOATLIT, count);
+                        token->value.as_string = float_str;
+                        return token;
+                    }
                 }
                 if (isalpha(c)) {
                     size_t count = 1;
@@ -226,6 +356,9 @@ Token *Lexer::next() {
                         if (keyword == "break") {
                             return make_token(TOKEN_BREAK, count);
                         }
+                        if (keyword == "sizeof") {
+                            return make_token(TOKEN_SIZEOF, count);
+                        }
                         const auto identifier = static_cast<char *>(malloc(count + 1));
                         strncpy(identifier, source + position, count);
                         identifier[count] = '\0';
@@ -272,6 +405,23 @@ Token *Lexer::next() {
 
                     const auto token = make_token(TOKEN_STRINGLIT, count);
                     token->value.as_string = value;
+                    return token;
+                }
+
+                if (c == '\'') {
+                     auto pos = position + 1;
+                    auto c = source[pos];
+                    if (c == '\\') {
+                        c = get_escaped_char(source[++pos]);
+                    }
+                    auto loc = location();
+                    if (source[pos + 1] != '\'') {
+                        std::cerr << "Unterminated character literal at " << loc->filename << ":" << loc->line << ":" <<
+                                loc->column << std::endl;
+                        exit(1);
+                    }
+                    auto token = make_token(TOKEN_CHARLIT, pos - position + 2);
+                    token->value.as_int = c;
                     return token;
                 }
 
