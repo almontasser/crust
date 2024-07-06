@@ -5,6 +5,8 @@
 #ifndef LEXER_H
 #define LEXER_H
 #include <cstdint>
+#include <cstdlib>
+#include <iostream>
 #include <vector>
 
 enum TokenType {
@@ -25,6 +27,10 @@ enum TokenType {
     TOKEN_VOID,
     TOKEN_ANY,
     TOKEN_IMPORT,
+    TOKEN_LET,
+    TOKEN_WHILE,
+    TOKEN_CONTINUE,
+    TOKEN_BREAK,
 
     // Literals
     TOKEN_INTLIT,
@@ -33,6 +39,11 @@ enum TokenType {
 
     // Operators
     TOKEN_STAR,
+    TOKEN_PLUS,
+    TOKEN_ASSIGN,
+    TOKEN_EXCLAMATION,
+    TOKEN_EQ,
+    TOKEN_NEQ,
 
     // Punctuation
     TOKEN_LPAREN,
@@ -70,15 +81,34 @@ struct Lexer {
 
     Token *make_token(TokenType type, size_t advance);
 
-    Token* next();
-    Token* peek();
+    char get_escaped_char(char c) {
+        switch (c) {
+            case 'n': return '\n';
+            case 'r': return '\r';
+            case 't': return '\t';
+            case '"': return '"';
+            case '\\': return '\\';
+            case 39: return 39; // Single quote
+            case '0': return 0;
+            default: {
+                std::cerr << filename << ":" << line << ":" << column << ": Unknown escape char: " << c << " (" << (int)
+                        c << ")" << std::endl;
+                exit(1);
+            }
+        }
+    }
+
+    Token *next();
+
+    Token *peek();
+
     void reset() {
         position = 0;
         line = 1;
         column = 1;
     }
 
-    Token* expect(TokenType type);
+    Token *expect(TokenType type);
 };
 
 struct Location {
@@ -93,10 +123,10 @@ struct Token {
 
     union {
         uint64_t as_int;
-        char* as_string;
+        char *as_string;
     } value;
 
-    char* to_string() const;
+    char *to_string() const;
 };
 
 inline bool is_literal_token(TokenType type) {

@@ -27,6 +27,7 @@ size_t size_of_base_type(const BaseType type) {
         case TYPE_I64:
         case TYPE_U64:
         case TYPE_F64:
+        case TYPE_POINTER:
         case TYPE_ANY:
             return 8;
         default:

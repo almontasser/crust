@@ -57,10 +57,19 @@ const char *token_type_to_string(const TokenType type) {
         case TOKEN_VOID: return "TOKEN_VOID";
         case TOKEN_ANY: return "TOKEN_ANY";
         case TOKEN_IMPORT: return "TOKEN_IMPORT";
+        case TOKEN_LET: return "TOKEN_LET";
+        case TOKEN_WHILE: return "TOKEN_WHILE";
+        case TOKEN_CONTINUE: return "TOKEN_CONTINUE";
+        case TOKEN_BREAK: return "TOKEN_BREAK";
         case TOKEN_INTLIT: return "TOKEN_INTLIT";
         case TOKEN_IDENTIFIER: return "TOKEN_IDENTIFIER";
         case TOKEN_STRINGLIT: return "TOKEN_STRINGLIT";
         case TOKEN_STAR: return "TOKEN_STAR";
+        case TOKEN_PLUS: return "TOKEN_PLUS";
+        case TOKEN_ASSIGN: return "TOKEN_ASSIGN";
+        case TOKEN_EXCLAMATION: return "TOKEN_EXCLAMATION";
+        case TOKEN_EQ: return "TOKEN_EQ";
+        case TOKEN_NEQ: return "TOKEN_NEQ";
         case TOKEN_LPAREN: return "TOKEN_LPAREN";
         case TOKEN_RPAREN: return "TOKEN_RPAREN";
         case TOKEN_LBRACE: return "TOKEN_LBRACE";
@@ -115,6 +124,19 @@ Token *Lexer::next() {
                 break;
 
             case '*': return make_token(TOKEN_STAR, 1);
+            case '+': return make_token(TOKEN_PLUS, 1);
+            case '!': {
+                if (source[position+1] == '=') {
+                    return make_token(TOKEN_NEQ, 2);
+                }
+                return make_token(TOKEN_EXCLAMATION, 1);
+            }
+            case '=': {
+                if (source[position+1] == '=') {
+                    return make_token(TOKEN_EQ, 2);
+                }
+                return make_token(TOKEN_ASSIGN, 1);
+            }
 
             case '(': return make_token(TOKEN_LPAREN, 1);
             case ')': return make_token(TOKEN_RPAREN, 1);
@@ -192,6 +214,18 @@ Token *Lexer::next() {
                         if (keyword == "import") {
                             return make_token(TOKEN_IMPORT, count);
                         }
+                        if (keyword == "let") {
+                            return make_token(TOKEN_LET, count);
+                        }
+                        if (keyword == "while") {
+                            return make_token(TOKEN_WHILE, count);
+                        }
+                        if (keyword == "continue") {
+                            return make_token(TOKEN_CONTINUE, count);
+                        }
+                        if (keyword == "break") {
+                            return make_token(TOKEN_BREAK, count);
+                        }
                         const auto identifier = static_cast<char *>(malloc(count + 1));
                         strncpy(identifier, source + position, count);
                         identifier[count] = '\0';
@@ -222,6 +256,20 @@ Token *Lexer::next() {
                     auto value = static_cast<char *>(malloc(count - 1));
                     strncpy(value, source + position + 1, count - 2);
                     value[count - 2] = '\0';
+
+                    // TODO: handle escape sequences
+                    size_t o_pos = 0;
+                    size_t n_pos = 0;
+                    while (o_pos < count - 1) {
+                        if (value[o_pos] == '\\') {
+                            value[n_pos] = get_escaped_char(value[++o_pos]);
+                        } else {
+                            value[n_pos] = value[o_pos];
+                        }
+                        o_pos++;
+                        n_pos++;
+                    }
+
                     const auto token = make_token(TOKEN_STRINGLIT, count);
                     token->value.as_string = value;
                     return token;

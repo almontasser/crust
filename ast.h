@@ -7,8 +7,15 @@
 #include <cstdint>
 #include <vector>
 
+#include "lexer.h"
+
 struct Type;
-struct Variable;
+
+struct Variable {
+    char* name;
+    Type* type;
+    size_t offset;
+};
 
 enum NodeType {
     // AST Types
@@ -24,6 +31,18 @@ enum NodeType {
     AST_DEREF,
     AST_MEMBER,
     AST_FUNCTION_CALL,
+    AST_VAR_DECLARATION,
+    AST_WHILE,
+    AST_CONTINUE,
+    AST_BREAK,
+    AST_ADDRESS_OF,
+    AST_NEG,
+    AST_NOT,
+    AST_MUL,
+    AST_EQ,
+    AST_NEQ,
+    AST_ASSIGN,
+    AST_PLUS,
 
     NUM_NODE_TYPES,
 };
@@ -35,16 +54,18 @@ struct Node {
     union {
         Node* expr;
 
+        Variable * variable;
+
         struct {
             char* name;
             Node* body;
             size_t max_locals_size;
-            std::vector<Variable*> args;
+            std::vector<Variable*>* args;
         } function;
 
         struct {
-            std::vector<Node*> children;
-            std::vector<Variable> locals;
+            std::vector<Node*>* children;
+            std::vector<Variable*>* locals;
             size_t locals_size;
         } block;
 
@@ -55,15 +76,32 @@ struct Node {
 
         struct {
             Node* function;
-            std::vector<Node*> args;
+            std::vector<Node*>* args;
         } call;
-    };
-};
 
-struct Variable {
-    char* name;
-    Type* type;
-    size_t offset;
+        struct {
+            Variable var;
+            Node* init;
+        } var_decl;
+
+        struct {
+            Node* condition;
+            Node* body;
+            // for loop
+            Node* init;
+            Node* step;
+        } loop;
+
+        struct {
+            Node* lhs;
+            Node* rhs;
+        } binary;
+
+        struct {
+            Node* lhs;
+            Node* rhs;
+        } assign;
+    };
 };
 
 Node* new_node(NodeType type);
@@ -72,5 +110,12 @@ Node* convert_type(Type* to, Node* from_node);
 Variable* new_variable(char* name, Type* type, size_t offset);
 
 bool is_lvalue(NodeType type);
+Node* decay_array_to_pointer(Node* node, Token* token);
+Node* type_check_unary(Node* node, Token* token);
+Node* type_check_binary(Node* node, Token* token);
+NodeType binary_token_to_op(TokenType type);
+Node* new_node_binop(NodeType type, Node* lhs, Node* rhs);
+Node* node_from_int_literal(uint64_t value);
+bool is_binary_op(NodeType type);
 
 #endif //AST_H
