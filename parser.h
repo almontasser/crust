@@ -7,6 +7,9 @@
 #include "ast.h"
 #include "lexer.h"
 
+inline auto global_variables = std::vector<Variable *>();
+inline auto global_offset = 0;
+
 Node* parse_program(Lexer* lexer);
 Node * parse_block(Lexer * lexer);
 

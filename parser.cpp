@@ -22,7 +22,6 @@ auto block_stack = std::vector<Node *>();
 size_t curr_stack_offset = 0;
 auto breakable_stack = std::vector<Node *>();
 
-
 Node *parse_expression(Lexer *lexer);
 
 size_t align_up(size_t val, int align) {
@@ -164,8 +163,18 @@ Variable *find_local_variable(char *name) {
     return nullptr;
 }
 
+Variable* find_global_variable(char * name) {
+    for (auto var: global_variables) {
+        if (strcmp(var->name, name) == 0) {
+            return var;
+        }
+    }
+    return nullptr;
+}
+
 bool identifier_exists(char *name) {
     if (find_local_variable(name) != nullptr) return true;
+    if (find_global_variable(name) != nullptr) return true;
     if (find_function(name, builtin_functions) != nullptr) return true;
     if (find_function(name, all_functions) != nullptr) return true;
     return false;
@@ -228,6 +237,14 @@ Node *parse_identifier(Lexer *lexer) {
     auto var = find_local_variable(name);
     if (var != nullptr) {
         node = new_node(AST_LOCAL_VAR);
+        node->variable = var;
+        node->etype = var->type;
+        return decay_array_to_pointer(node, token);
+    }
+
+    var = find_global_variable(name);
+    if (var != nullptr) {
+        node = new_node(AST_GLOBAL_VAR);
         node->variable = var;
         node->etype = var->type;
         return decay_array_to_pointer(node, token);
@@ -618,6 +635,12 @@ void add_variable_to_current_block(Variable *var) {
     current_function->function.max_locals_size = max_offset;
 }
 
+void add_global_variable(Variable * var) {
+    var->offset = global_offset;
+    global_offset += align_up(size_of_type(var->type), 8);
+    global_variables.push_back(var);
+}
+
 Node *parse_var_declaration(Lexer *lexer) {
     lexer->expect(TOKEN_LET);
     auto token = lexer->expect(TOKEN_IDENTIFIER);
@@ -668,7 +691,7 @@ Node *parse_var_declaration(Lexer *lexer) {
     }
 
     if (is_global) {
-        // TODO: add to global variables
+        add_global_variable(&node->var_decl.var);
     } else {
         add_variable_to_current_block(&node->var_decl.var);
     }
@@ -851,7 +874,7 @@ Node *parse_function(Lexer *lexer, bool first_pass) {
             func->etype = new_type(TYPE_VOID);
         }
 
-        // Skip function body
+        // Skip function body if first pass
         lexer->expect(TOKEN_LBRACE);
         auto lbrace_count = 1;
         while (lbrace_count > 0) {
@@ -914,6 +937,14 @@ Node *parse_program(Lexer *lexer) {
                 }
             } else if (token->type == TOKEN_FN) {
                 child = parse_function(lexer, first_pass);
+            } else if (token->type == TOKEN_LET) {
+                if (!first_pass) {
+                    // Skip
+                    while (token->type != TOKEN_SEMICOLON) token = lexer->next();
+                } else {
+                    child = parse_var_declaration(lexer);
+                    lexer->expect(TOKEN_SEMICOLON);
+                }
             }
 
             if (child != nullptr) {

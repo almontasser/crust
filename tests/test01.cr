@@ -20,7 +20,7 @@ fn main(): u32 {
     puts("2+5="); print(2+5); puts("\n");
     puts("2-5="); print(2-5); puts("\n");
     puts("2*5="); print(2*5); puts("\n");
-    puts("2/5="); print(2.0/5); puts("\n");
+    puts("2.0/5="); print(2.0/5); puts("\n");
     puts("2%5="); print(2%5); puts("\n");
     puts("2==5="); print(2==5); puts("\n");
     puts("2!=5="); print(2!=5); puts("\n");

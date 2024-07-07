@@ -8,6 +8,7 @@
 #include <iostream>
 #include <ostream>
 
+#include "parser.h"
 #include "types.h"
 
 auto OS_IS_MACOS = false;
@@ -522,6 +523,8 @@ void generate_program(Node *ast, FILE *file) {
         auto node = ast->block.children->at(i);
         if (node->type == AST_FUNCTION) {
             generate_function(node);
+        } else if (node->type == AST_VAR_DECLARATION) {
+            // Do nothing
         } else {
             std::cerr << "Unknown node type: " << node->type << " in generate_program()" << std::endl;
             exit(1);
@@ -561,6 +564,17 @@ void generate_program(Node *ast, FILE *file) {
     }
 
     // TODO: Initialize global variables
+    for (const auto node : *ast->block.children) {
+        if (node->type == AST_VAR_DECLARATION && node->var_decl.init != nullptr) {
+            const auto expr = node->var_decl.init;
+            generate_expression(expr);
+            const auto offset = node->var_decl.var.offset;
+            emit_asm("\tmov rcx, qword gvars\n");
+            emit_asm("\tadd rcx, "); emit_num(offset); emit_asm("\n");
+            emit_asm3("\tmov [rcx], ", subregister_for_type(expr->etype), "\n");
+        }
+    }
+
 
     emit_asm("\tcall func_main\n");
     emit_asm("\tmov rdi, rax\n");
@@ -568,8 +582,8 @@ void generate_program(Node *ast, FILE *file) {
 
     generate_builtins();
 
-    // emit_asm("section .bss\n");
-    // emit_asm("\tgvars: resb "); emit_num(p_global_offset); emit_asm("\n");
+    emit_asm("section .bss\n");
+    emit_asm("\tgvars: resb "); emit_num(global_offset); emit_asm("\n");
 
     // Global strings
     emit_asm("section .data\n");

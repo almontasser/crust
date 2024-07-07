@@ -40,7 +40,7 @@ Lexer *Lexer::create_from_file(const char *filename) {
 }
 
 const char *token_type_to_string(const TokenType type) {
-    static_assert(NUM_TOKEN_TYPES == 65, "Exhaustive match in token_type_to_string()");
+    static_assert(NUM_TOKEN_TYPES == 75, "Exhaustive match in token_type_to_string()");
 
     switch (type) {
         case TOKEN_FN: return "TOKEN_FN";
@@ -64,6 +64,16 @@ const char *token_type_to_string(const TokenType type) {
         case TOKEN_CONTINUE: return "TOKEN_CONTINUE";
         case TOKEN_BREAK: return "TOKEN_BREAK";
         case TOKEN_SIZEOF: return "TOKEN_SIZEOF";
+        case TOKEN_IF: return "TOKEN_IF";
+        case TOKEN_ELSE: return "TOKEN_ELSE";
+        case TOKEN_STRUCT: return "TOKEN_STRUCT";
+        case TOKEN_ENUM: return "TOKEN_ENUM";
+        case TOKEN_UNION: return "TOKEN_UNION";
+        case TOKEN_NEW: return "TOKEN_NEW";
+        case TOKEN_DEFER: return "TOKEN_DEFER";
+        case TOKEN_MATCH: return "TOKEN_MATCH";
+        case TOKEN_DEFAULT: return "TOKEN_DEFAULT";
+        case TOKEN_FOR: return "TOKEN_FOR";
         case TOKEN_INTLIT: return "TOKEN_INTLIT";
         case TOKEN_IDENTIFIER: return "TOKEN_IDENTIFIER";
         case TOKEN_STRINGLIT: return "TOKEN_STRINGLIT";
@@ -159,7 +169,7 @@ Token *Lexer::next() {
                 }
                 return make_token(TOKEN_PLUS, 1);
             }
-            case '-' : {
+            case '-': {
                 if (source[position + 1] == '-') {
                     return make_token(TOKEN_MINUS_MINUS, 2);
                 }
@@ -282,7 +292,7 @@ Token *Lexer::next() {
                         token->value.as_int = value;
                         return token;
                     } else {
-                        char* float_str = static_cast<char *>(malloc(count + 1));
+                        char *float_str = static_cast<char *>(malloc(count + 1));
                         strncpy(float_str, source + position, count);
                         float_str[count] = '\0';
                         const auto token = make_token(TOKEN_FLOATLIT, count);
@@ -359,6 +369,36 @@ Token *Lexer::next() {
                         if (keyword == "sizeof") {
                             return make_token(TOKEN_SIZEOF, count);
                         }
+                        if (keyword == "if") {
+                            return make_token(TOKEN_IF, count);
+                        }
+                        if (keyword == "else") {
+                            return make_token(TOKEN_ELSE, count);
+                        }
+                        if (keyword == "struct") {
+                            return make_token(TOKEN_STRUCT, count);
+                        }
+                        if (keyword == "enum") {
+                            return make_token(TOKEN_ENUM, count);
+                        }
+                        if (keyword == "union") {
+                            return make_token(TOKEN_UNION, count);
+                        }
+                        if (keyword == "new") {
+                            return make_token(TOKEN_NEW, count);
+                        }
+                        if (keyword == "defer") {
+                            return make_token(TOKEN_DEFER, count);
+                        }
+                        if (keyword == "match") {
+                            return make_token(TOKEN_MATCH, count);
+                        }
+                        if (keyword == "default") {
+                            return make_token(TOKEN_DEFAULT, count);
+                        }
+                        if (keyword == "for") {
+                            return make_token(TOKEN_FOR, count);
+                        }
                         const auto identifier = static_cast<char *>(malloc(count + 1));
                         strncpy(identifier, source + position, count);
                         identifier[count] = '\0';
@@ -409,7 +449,7 @@ Token *Lexer::next() {
                 }
 
                 if (c == '\'') {
-                     auto pos = position + 1;
+                    auto pos = position + 1;
                     auto c = source[pos];
                     if (c == '\\') {
                         c = get_escaped_char(source[++pos]);
