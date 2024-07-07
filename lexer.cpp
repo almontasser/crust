@@ -40,7 +40,7 @@ Lexer *Lexer::create_from_file(const char *filename) {
 }
 
 const char *token_type_to_string(const TokenType type) {
-    static_assert(NUM_TOKEN_TYPES == 75, "Exhaustive match in token_type_to_string()");
+    static_assert(NUM_TOKEN_TYPES == 77, "Exhaustive match in token_type_to_string()");
 
     switch (type) {
         case TOKEN_FN: return "TOKEN_FN";
@@ -74,9 +74,15 @@ const char *token_type_to_string(const TokenType type) {
         case TOKEN_MATCH: return "TOKEN_MATCH";
         case TOKEN_DEFAULT: return "TOKEN_DEFAULT";
         case TOKEN_FOR: return "TOKEN_FOR";
+        case TOKEN_TRUE: return "TOKEN_TRUE";
+        case TOKEN_FALSE: return "TOKEN_FALSE";
+
         case TOKEN_INTLIT: return "TOKEN_INTLIT";
         case TOKEN_IDENTIFIER: return "TOKEN_IDENTIFIER";
         case TOKEN_STRINGLIT: return "TOKEN_STRINGLIT";
+        case TOKEN_FLOATLIT: return "TOKEN_FLOATLIT";
+        case TOKEN_CHARLIT: return "TOKEN_CHARLIT";
+
         case TOKEN_STAR: return "TOKEN_STAR";
         case TOKEN_SLASH: return "TOKEN_SLASH";
         case TOKEN_PLUS: return "TOKEN_PLUS";
@@ -398,6 +404,12 @@ Token *Lexer::next() {
                         }
                         if (keyword == "for") {
                             return make_token(TOKEN_FOR, count);
+                        }
+                        if (keyword == "true") {
+                            return make_token(TOKEN_TRUE, count);
+                        }
+                        if (keyword == "false") {
+                            return make_token(TOKEN_FALSE, count);
                         }
                         const auto identifier = static_cast<char *>(malloc(count + 1));
                         strncpy(identifier, source + position, count);

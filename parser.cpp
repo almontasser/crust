@@ -382,6 +382,12 @@ Node *parse_factor(Lexer *lexer) {
         expr = new_node(AST_DEREF);
         expr->expr = subexp;
         expr = type_check_unary(expr, token);
+    } else if (token->type == TOKEN_TRUE) {
+        lexer->next();
+        expr = node_from_int_literal(1);
+    } else if (token->type == TOKEN_FALSE) {
+        lexer->next();
+        expr = node_from_int_literal(0);
     } else { // TODO: implement new keyword
         std::cerr << "Unexpected token: " << token->type << " at " << token->location->filename << ":" << token->
                 location->line << ":" << token->location->column << std::endl;
@@ -737,6 +743,22 @@ Node *parse_statement(Lexer *lexer) {
         }
         node->etype = current_function->etype;
         lexer->expect(TOKEN_SEMICOLON);
+    } else if (token->type == TOKEN_IF) {
+        lexer->next();
+
+        node = new_node(AST_IF);
+
+        lexer->expect(TOKEN_LPAREN);
+        node->conditional.condition = parse_expression(lexer);
+        lexer->expect(TOKEN_RPAREN);
+
+        node->conditional.then = parse_statement(lexer);
+
+        token = lexer->peek();
+        if (token->type == TOKEN_ELSE) {
+            lexer->next();
+            node->conditional.els = parse_statement(lexer);
+        }
     } else if (token->type == TOKEN_LET) {
         node = parse_var_declaration(lexer);
         lexer->expect(TOKEN_SEMICOLON);

@@ -59,6 +59,7 @@ enum NodeType {
     AST_LEQ,
     AST_GT,
     AST_GEQ,
+    AST_IF,
 
     NUM_NODE_TYPES,
 };

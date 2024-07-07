@@ -42,6 +42,8 @@ enum TokenType {
     TOKEN_MATCH,
     TOKEN_DEFAULT,
     TOKEN_FOR,
+    TOKEN_TRUE,
+    TOKEN_FALSE,
 
     NUM_KEYWORDS,
 

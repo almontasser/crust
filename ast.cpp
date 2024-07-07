@@ -76,7 +76,7 @@ Variable *new_variable(char *name, Type *type, size_t offset) {
 }
 
 bool is_lvalue(NodeType type) {
-    static_assert(NUM_NODE_TYPES == 40, "Exhaustive match in is_lvalue()");
+    static_assert(NUM_NODE_TYPES == 41, "Exhaustive match in is_lvalue()");
     if (type == AST_LOCAL_VAR) return true;
     if (type == AST_GLOBAL_VAR) return true;
     if (type == AST_MEMBER) return true;
@@ -97,7 +97,7 @@ Node *decay_array_to_pointer(Node *node, Token *token) {
 }
 
 Node *type_check_unary(Node *node, Token *token) {
-    static_assert(NUM_NODE_TYPES == 40, "Exhaustive match in type_check_unary()");
+    static_assert(NUM_NODE_TYPES == 41, "Exhaustive match in type_check_unary()");
 
     auto old_type = node->expr->etype;
 
@@ -145,7 +145,7 @@ Node *type_check_unary(Node *node, Token *token) {
 }
 
 Node *type_check_binary(Node *node, Token *token) {
-    static_assert(NUM_NODE_TYPES == 40, "Exhaustive match in type_check_binary()");
+    static_assert(NUM_NODE_TYPES == 41, "Exhaustive match in type_check_binary()");
 
     auto lhs = node->binary.lhs->etype;
     auto rhs = node->binary.rhs->etype;
@@ -271,7 +271,7 @@ Node *type_check_binary(Node *node, Token *token) {
 }
 
 NodeType binary_token_to_op(TokenType type) {
-    static_assert(NUM_NODE_TYPES == 40, "Exhaustive match in binary_token_to_op()");
+    static_assert(NUM_NODE_TYPES == 41, "Exhaustive match in binary_token_to_op()");
 
     if (type == TOKEN_PLUS) return AST_PLUS;
     if (type == TOKEN_MINUS) return AST_MINUS;
@@ -311,7 +311,7 @@ Node *node_from_int_literal(uint64_t value) {
 }
 
 bool is_binary_op(NodeType type) {
-    static_assert(NUM_NODE_TYPES == 40, "Exhaustive match in is_binary_op");
+    static_assert(NUM_NODE_TYPES == 41, "Exhaustive match in is_binary_op");
     if (type == AST_PLUS) return true;
     if (type == AST_MINUS) return true;
     if (type == AST_MUL) return true;

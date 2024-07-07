@@ -408,6 +408,24 @@ void generate_statement(Node *node) {
         // TODO: Implement deferred statements
 
         emit_asm("\tjmp .break_"); emit_num(gen_current_break); emit_asm("\n");
+    } else if (node->type == AST_IF) {
+        auto label = ++gen_label_counter;
+        generate_expression(node->conditional.condition);
+        // If we don't have an `else` clause, we can simplify
+        if (node->conditional.els == nullptr) {
+            emit_asm("\tcmp rax, 0\n");
+            emit_asm("\tje .if_end_"); emit_num(label); emit_asm("\n");
+            generate_statement(node->conditional.then);
+            emit_asm(".if_end_"); emit_num(label); emit_asm(":\n");
+        } else {
+            emit_asm("\tcmp rax, 0\n");
+            emit_asm("\tje .if_else_"); emit_num(label); emit_asm("\n");
+            generate_statement(node->conditional.then);
+            emit_asm("\tjmp .if_end_"); emit_num(label); emit_asm("\n");
+            emit_asm(".if_else_"); emit_num(label); emit_asm(":\n");
+            generate_statement(node->conditional.els);
+            emit_asm(".if_end_"); emit_num(label); emit_asm(":\n");
+        }
     } else {
         generate_expression(node);
     }
