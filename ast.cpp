@@ -60,10 +60,14 @@ Node *convert_type(Type *to, Node *from_node) {
 
     // TODO: Should we raise a warning if the target type is narrower
     //       than the source type?
-    // TODO: Check for enums
     if (is_int_type(from) && is_int_type(to)) return from_node;
 
-    if (types_equal(from, to)) return from_node;
+    if (types_equal(from, to)) {
+        if (from->base == TYPE_ENUM) {
+            return from_node->constant.value;
+        }
+        return from_node;
+    }
 
     return nullptr;
 }

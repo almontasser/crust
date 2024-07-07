@@ -106,8 +106,7 @@ bool is_float_type(const Type *type) {
 
 bool is_int_type(const Type *type) {
     return type->base == TYPE_I8 || type->base == TYPE_I16 || type->base == TYPE_I32 || type->base == TYPE_I64 ||
-           type->base == TYPE_U8 || type->base == TYPE_U16 || type->base == TYPE_U32 || type->base == TYPE_U64 ||
-               type->base == TYPE_ENUM;
+           type->base == TYPE_U8 || type->base == TYPE_U16 || type->base == TYPE_U32 || type->base == TYPE_U64;
 }
 
 bool types_equal(const Type *a, const Type *b) {
@@ -116,7 +115,7 @@ bool types_equal(const Type *a, const Type *b) {
     if (a->base == TYPE_ANY || b->base == TYPE_ANY) return true;
 
     if (a->base == b->base) {
-        if (a->base == TYPE_STRUCT || a->base == TYPE_UNION) {
+        if (a->base == TYPE_STRUCT || a->base == TYPE_UNION || a->base == TYPE_ENUM) {
             return strcmp(a->struct_name, b->struct_name) == 0;
         }
         return types_equal(a->ptr, b->ptr);

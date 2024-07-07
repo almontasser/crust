@@ -1,11 +1,17 @@
-enum Variants {
-  Variant1,
-  Variant2,
-  Variant3,
+enum E1 {
+    A,
+    B,
+    C,
+};
+
+enum E2 {
+    A,
+    B,
+    C,
 };
 
 fn main() {
-  let v: Variants = Variants::Variant3;
-  print(v);
+  let e: E1 = E1::C;
+  print(e);
   return;
 }

@@ -299,7 +299,7 @@ Node *parse_identifier(Lexer *lexer) {
                     << ":" << token->location->line << ":" <<token->location->column << std::endl;
                 exit(1);
             }
-            return constant->constant.value;
+            return constant;
         } else {
             std::cerr << "Not implemented at parse_identifier()" << std::endl;
             exit(1);
@@ -732,6 +732,7 @@ Node *parse_var_declaration(Lexer *lexer) {
         } else {
             auto conv = convert_type(node->var_decl.var.type, node->var_decl.init);
             if (conv == nullptr) {
+                // TODO: print enum name
                 std::cerr << "Cannot convert " << node->var_decl.init->etype->base << " to " << node->var_decl.var.type
                         ->base << " at " << token->location->filename << ":"
                         << token->location->line << ":" << token->location->column << std::endl;
