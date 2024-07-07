@@ -60,6 +60,8 @@ enum NodeType {
     AST_GT,
     AST_GEQ,
     AST_IF,
+    AST_ENUM,
+    AST_CONSTANT,
 
     NUM_NODE_TYPES,
 };
@@ -124,6 +126,11 @@ struct Node {
             Node *then;
             Node *els;
         } conditional;
+
+        struct {
+            char* name;
+            Node* value; // must be int literal
+        } constant;
     };
 };
 

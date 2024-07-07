@@ -42,6 +42,7 @@ size_t size_of_type(const Type *type) { // NOLINT(*-no-recursion)
     if (type->base == TYPE_POINTER) return type->size; // TODO: check this
     if (type->base == TYPE_STRUCT) return type->size;
     if (type->base == TYPE_UNION) return type->size;
+    if (type->base == TYPE_ENUM) return type->size;
     if (type->base == TYPE_ARRAY) return type->array_size * size_of_type(type->ptr);
 
     std::cerr << "Unknown type: " << type->base << std::endl;
@@ -105,7 +106,8 @@ bool is_float_type(const Type *type) {
 
 bool is_int_type(const Type *type) {
     return type->base == TYPE_I8 || type->base == TYPE_I16 || type->base == TYPE_I32 || type->base == TYPE_I64 ||
-           type->base == TYPE_U8 || type->base == TYPE_U16 || type->base == TYPE_U32 || type->base == TYPE_U64;
+           type->base == TYPE_U8 || type->base == TYPE_U16 || type->base == TYPE_U32 || type->base == TYPE_U64 ||
+               type->base == TYPE_ENUM;
 }
 
 bool types_equal(const Type *a, const Type *b) {

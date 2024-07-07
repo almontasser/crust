@@ -31,6 +31,7 @@ enum BaseType {
     TYPE_ARRAY,
     TYPE_STRUCT,
     TYPE_UNION,
+    TYPE_ENUM,
 
     NUM_TYPES,
 };
@@ -46,6 +47,8 @@ struct Type {
     std::vector<Variable> fields;
     std::vector<Node> members;
     Node* constructor;
+
+    std::vector<Node*>* variants;
 };
 
 size_t size_of_base_type(BaseType type);

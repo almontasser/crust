@@ -21,8 +21,11 @@ Node *current_function = nullptr;
 auto block_stack = std::vector<Node *>();
 size_t curr_stack_offset = 0;
 auto breakable_stack = std::vector<Node *>();
+auto compound_types = std::vector<Type *>();
+auto constants = std::vector<Node *>();
 
 Node *parse_expression(Lexer *lexer);
+Type *find_compound_type(char *name);
 
 size_t align_up(size_t val, int align) {
     return (val + align - 1) & ~(align - 1);
@@ -96,7 +99,12 @@ Type *parse_type(Lexer *lexer) {
                 exit(1);
             }
             // TODO: find compound type
-            exit(1);
+            type = find_compound_type(token->value.as_string);
+            if (type == nullptr) {
+                std::cerr << "Unknown type: " << token->type << " at " << token->location->filename << ":" << token->
+                        location->line << ":" << token->location->column << std::endl;
+                exit(1);
+            }
         }
     }
 
@@ -163,10 +171,28 @@ Variable *find_local_variable(char *name) {
     return nullptr;
 }
 
-Variable* find_global_variable(char * name) {
+Variable *find_global_variable(char *name) {
     for (auto var: global_variables) {
         if (strcmp(var->name, name) == 0) {
             return var;
+        }
+    }
+    return nullptr;
+}
+
+Type *find_compound_type(char *name) {
+    for (auto type: compound_types) {
+        if (strcmp(type->struct_name, name) == 0) {
+            return type;
+        }
+    }
+    return nullptr;
+}
+
+Node *find_constant(char *name, const std::vector<Node *> *constants_vector) {
+    for (auto constant: *constants_vector) {
+        if (strcmp(constant->constant.name, name) == 0) {
+            return constant;
         }
     }
     return nullptr;
@@ -177,6 +203,8 @@ bool identifier_exists(char *name) {
     if (find_global_variable(name) != nullptr) return true;
     if (find_function(name, builtin_functions) != nullptr) return true;
     if (find_function(name, all_functions) != nullptr) return true;
+    if (find_compound_type(name) != nullptr) return true;
+    if (find_constant(name, &constants) != nullptr) return true;
     return false;
 }
 
@@ -260,7 +288,24 @@ Node *parse_identifier(Lexer *lexer) {
         return parse_function_call_args(lexer, func, nullptr);
     }
 
-    // TODO: check for local and global variables
+    auto type = find_compound_type(name);
+    if (type != nullptr) {
+        if (type->base == TYPE_ENUM) {
+            lexer->expect(TOKEN_COLON_COLON);
+            token = lexer->expect(TOKEN_IDENTIFIER);
+            auto constant = find_constant(token->value.as_string, type->variants);
+            if (constant == nullptr) {
+                std::cerr << "Variant \"" << token->value.as_string << "\" not found at " << token->location->filename
+                    << ":" << token->location->line << ":" <<token->location->column << std::endl;
+                exit(1);
+            }
+            return constant->constant.value;
+        } else {
+            std::cerr << "Not implemented at parse_identifier()" << std::endl;
+            exit(1);
+        }
+    }
+
     std::cerr << "Unknown identifier: " << name << " at " << token->location->filename << ":" << token->location->line
             << ":" << token->location->column << std::endl;
     exit(1);
@@ -316,7 +361,8 @@ Node *parse_factor(Lexer *lexer) {
         expr = new_node(AST_ASSIGN);
         expr->assign.lhs = parse_factor(lexer);
         if (!is_lvalue(expr->assign.lhs->type)) {
-            std::cerr << "Expected lvalue at " << token->location->filename << ":" << token->location->line << ":" << token
+            std::cerr << "Expected lvalue at " << token->location->filename << ":" << token->location->line << ":" <<
+                    token
                     ->location->column << std::endl;
             exit(1);
         }
@@ -330,7 +376,8 @@ Node *parse_factor(Lexer *lexer) {
         expr = new_node(AST_ASSIGN);
         expr->assign.lhs = parse_factor(lexer);
         if (!is_lvalue(expr->assign.lhs->type)) {
-            std::cerr << "Expected lvalue at " << token->location->filename << ":" << token->location->line << ":" << token
+            std::cerr << "Expected lvalue at " << token->location->filename << ":" << token->location->line << ":" <<
+                    token
                     ->location->column << std::endl;
             exit(1);
         }
@@ -363,7 +410,8 @@ Node *parse_factor(Lexer *lexer) {
         expr = new_node(AST_ADDRESS_OF);
         expr->expr = parse_factor(lexer);
         if (!is_lvalue(expr->expr->type)) {
-            std::cerr << "Expected lvalue at " << token->location->filename << ":" << token->location->line << ":" << token
+            std::cerr << "Expected lvalue at " << token->location->filename << ":" << token->location->line << ":" <<
+                    token
                     ->location->column << std::endl;
             exit(1);
         }
@@ -388,7 +436,8 @@ Node *parse_factor(Lexer *lexer) {
     } else if (token->type == TOKEN_FALSE) {
         lexer->next();
         expr = node_from_int_literal(0);
-    } else { // TODO: implement new keyword
+    } else {
+        // TODO: implement new keyword
         std::cerr << "Unexpected token: " << token->type << " at " << token->location->filename << ":" << token->
                 location->line << ":" << token->location->column << std::endl;
         exit(1);
@@ -415,12 +464,14 @@ Node *parse_factor(Lexer *lexer) {
             expr = type_check_unary(expr, token);
         } else if (token->type == TOKEN_DOT) {
             // TODO: implement struct access
-            std::cerr << "Struct access not implemented at " << token->location->filename << ":" << token->location->line
+            std::cerr << "Struct access not implemented at " << token->location->filename << ":" << token->location->
+                    line
                     << ":" << token->location->column << std::endl;
             exit(1);
         } else if (token->type == TOKEN_COLON_COLON) {
             // TODO: implement struct access
-            std::cerr << "Namespace access not implemented at " << token->location->filename << ":" << token->location->line
+            std::cerr << "Namespace access not implemented at " << token->location->filename << ":" << token->location->
+                    line
                     << ":" << token->location->column << std::endl;
             exit(1);
         } else {
@@ -641,7 +692,7 @@ void add_variable_to_current_block(Variable *var) {
     current_function->function.max_locals_size = max_offset;
 }
 
-void add_global_variable(Variable * var) {
+void add_global_variable(Variable *var) {
     var->offset = global_offset;
     global_offset += align_up(size_of_type(var->type), 8);
     global_variables.push_back(var);
@@ -870,7 +921,7 @@ Node *parse_function(Lexer *lexer, bool first_pass) {
     lexer->expect(TOKEN_FN);
     const auto name = lexer->expect(TOKEN_IDENTIFIER);
 
-    Node* func;
+    Node *func;
     if (first_pass) {
         func = new_node(AST_FUNCTION);
         func->function.name = name->value.as_string;
@@ -927,6 +978,51 @@ Node *parse_function(Lexer *lexer, bool first_pass) {
     }
 }
 
+Node* constant_push(char * name, size_t value, std::vector<Node *> * constants_vector) {
+    auto node = new_node(AST_CONSTANT);
+    node->constant.name = name;
+    node->constant.value = node_from_int_literal(value);
+    constants_vector->push_back(node);
+    return node;
+}
+
+void parse_enum_declaration(Lexer *lexer) {
+    lexer->expect(TOKEN_ENUM);
+
+    auto token = lexer->expect(TOKEN_IDENTIFIER);
+
+    auto type = new_type(TYPE_ENUM);
+    type->variants = new std::vector<Node *>();
+    type->struct_name = token->value.as_string;
+    type->size = 1; // TODO: check this
+
+    compound_types.push_back(type);
+
+    lexer->expect(TOKEN_LBRACE);
+
+    size_t enum_count = 0;
+    token = lexer->peek();
+    while (token->type != TOKEN_RBRACE) {
+        token = lexer->expect(TOKEN_IDENTIFIER);
+
+        if (find_constant(token->value.as_string, type->variants)) {
+            std::cerr << "Variant already exists at " << token->location->filename << ":" << token->location->line <<
+                    ":" << token->location->column << std::endl;
+            exit(1);
+        }
+
+        auto constant = constant_push(token->value.as_string, enum_count++, type->variants);
+        constant->etype = type;
+
+        token = lexer->peek();
+        if (token->type == TOKEN_COMMA) {
+            lexer->next();
+            token = lexer->peek();
+        }
+    }
+    lexer->expect(TOKEN_RBRACE);
+}
+
 Node *parse_program(Lexer *lexer) {
     initialize_builtins();
 
@@ -965,6 +1061,14 @@ Node *parse_program(Lexer *lexer) {
                     while (token->type != TOKEN_SEMICOLON) token = lexer->next();
                 } else {
                     child = parse_var_declaration(lexer);
+                    lexer->expect(TOKEN_SEMICOLON);
+                }
+            } else if (token->type == TOKEN_ENUM) {
+                if (!first_pass) {
+                    // Skip
+                    while (token->type != TOKEN_SEMICOLON) token = lexer->next();
+                } else {
+                    parse_enum_declaration(lexer);
                     lexer->expect(TOKEN_SEMICOLON);
                 }
             }
