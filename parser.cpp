@@ -25,17 +25,15 @@ auto compound_types = std::vector<Type *>();
 auto constants = std::vector<Node *>();
 
 Node *parse_expression(Lexer *lexer);
-Type *find_compound_type(char *name);
 
-size_t align_up(size_t val, int align) {
-    return (val + align - 1) & ~(align - 1);
-}
+Type *find_compound_type(char *name);
 
 void builtin_create_syscall(const char *name, int num_args) {
     const auto node = new_node(AST_BUILTIN);
     node->etype = new_type(TYPE_ANY);
     node->function.name = static_cast<char *>(malloc(strlen(name) + 1));
     strcpy(node->function.name, name);
+    node->function.is_method = false;
     node->function.args = new std::vector<Variable *>();
     node->function.args->push_back(new_variable("val", new_type(TYPE_U64), 0)); // syscall number
     for (int i = 0; i < num_args; i++) {
@@ -48,6 +46,7 @@ void initialize_builtins() {
     Node *node = new_node(AST_BUILTIN);
     node->etype = new_type(TYPE_VOID);
     node->function.name = "print";
+    node->function.is_method = false;
     node->function.args = new std::vector<Variable *>();
     node->function.args->push_back(new_variable("val", new_type(TYPE_ANY), 0));
     builtin_functions.push_back(node);
@@ -140,8 +139,8 @@ void block_stack_pop() {
     curr_stack_offset -= block->block.locals->size();
 }
 
-Node *find_function(char *name, const std::vector<Node *> &nodes) {
-    for (const auto node: nodes) {
+Node *find_function(char *name, const std::vector<Node *> *nodes) {
+    for (const auto node: *nodes) {
         if (strcmp(node->function.name, name) == 0) {
             return node;
         }
@@ -201,8 +200,8 @@ Node *find_constant(char *name, const std::vector<Node *> *constants_vector) {
 bool identifier_exists(char *name) {
     if (find_local_variable(name) != nullptr) return true;
     if (find_global_variable(name) != nullptr) return true;
-    if (find_function(name, builtin_functions) != nullptr) return true;
-    if (find_function(name, all_functions) != nullptr) return true;
+    if (find_function(name, &builtin_functions) != nullptr) return true;
+    if (find_function(name, &all_functions) != nullptr) return true;
     if (find_compound_type(name) != nullptr) return true;
     if (find_constant(name, &constants) != nullptr) return true;
     return false;
@@ -278,12 +277,12 @@ Node *parse_identifier(Lexer *lexer) {
         return decay_array_to_pointer(node, token);
     }
 
-    auto func = find_function(name, builtin_functions);
+    auto func = find_function(name, &builtin_functions);
     if (func != nullptr) {
         return parse_function_call_args(lexer, func, nullptr);
     }
 
-    func = find_function(name, all_functions);
+    func = find_function(name, &all_functions);
     if (func != nullptr) {
         return parse_function_call_args(lexer, func, nullptr);
     }
@@ -296,7 +295,7 @@ Node *parse_identifier(Lexer *lexer) {
             auto constant = find_constant(token->value.as_string, type->variants);
             if (constant == nullptr) {
                 std::cerr << "Variant \"" << token->value.as_string << "\" not found at " << token->location->filename
-                    << ":" << token->location->line << ":" <<token->location->column << std::endl;
+                        << ":" << token->location->line << ":" << token->location->column << std::endl;
                 exit(1);
             }
             return constant;
@@ -446,7 +445,60 @@ Node *parse_factor(Lexer *lexer) {
     while (true) {
         token = lexer->peek();
 
-        if (token->type == TOKEN_LBRACKET) {
+        if (token->type == TOKEN_DOT) {
+            lexer->next();
+            if (!is_struct_or_structptr(expr->etype)) {
+                std::cerr << "Cannot access member of non-struct type" << std::endl;
+                exit(1);
+            }
+
+            auto is_ptr = expr->etype->base == TYPE_POINTER;
+            auto struct_type = is_ptr ? expr->etype->ptr : expr->etype;
+
+            token = lexer->expect(TOKEN_IDENTIFIER);
+            auto name = token->value.as_string;
+
+            auto prev_token = token;
+            token = lexer->peek();
+            if (token->type == TOKEN_LPAREN) {
+                auto method = compound_find_method(struct_type, name);
+
+                if (method == nullptr) {
+                    std::cerr << "Method not found: " << name << " at " << token->location->filename << ":" << token->
+                            location->line << ":" << token->location->column << std::endl;
+                    exit(1);
+                }
+
+                Node *obj_ptr;
+
+                if (is_ptr) {
+                    obj_ptr = expr;
+                } else {
+                    obj_ptr = new_node(AST_ADDRESS_OF);
+                    obj_ptr->expr = expr;
+                    obj_ptr = type_check_unary(obj_ptr, prev_token);
+                }
+
+                expr = parse_function_call_args(lexer, method, obj_ptr);
+            } else {
+                auto field = compound_find_field(struct_type, name);
+
+                if (field == nullptr) {
+                    std::cerr << "Field not found: " << name << " at " << token->location->filename << ":" << token->
+                            location->line << ":" << token->location->column << std::endl;
+                    exit(1);
+                }
+
+                auto member = new_node(AST_MEMBER);
+
+                member->etype = field->type;
+                member->member.obj = expr;
+                member->member.offset = field->offset;
+                member->member.is_ptr = is_ptr;
+
+                expr = decay_array_to_pointer(member, prev_token);
+            }
+        } else if (token->type == TOKEN_LBRACKET) {
             if (expr->etype->base != TYPE_POINTER) {
                 std::cerr << "Cannot index non-pointer type at " << token->location->filename << ":" << token->location
                         ->line << ":" << token->location->column << std::endl;
@@ -462,12 +514,6 @@ Node *parse_factor(Lexer *lexer) {
             expr = new_node(AST_DEREF);
             expr->expr = offset;
             expr = type_check_unary(expr, token);
-        } else if (token->type == TOKEN_DOT) {
-            // TODO: implement struct access
-            std::cerr << "Struct access not implemented at " << token->location->filename << ":" << token->location->
-                    line
-                    << ":" << token->location->column << std::endl;
-            exit(1);
         } else if (token->type == TOKEN_COLON_COLON) {
             // TODO: implement struct access
             std::cerr << "Namespace access not implemented at " << token->location->filename << ":" << token->location->
@@ -877,7 +923,9 @@ Node *parse_block(Lexer *lexer) {
 }
 
 void parse_function_params(Lexer *lexer, Node *func) {
-    func->function.args = new std::vector<Variable *>();
+    if (func->function.args == nullptr) {
+        func->function.args = new std::vector<Variable *>();
+    }
 
     auto token = lexer->peek();
     while (token->type != TOKEN_RPAREN) {
@@ -962,7 +1010,7 @@ Node *parse_function(Lexer *lexer, bool first_pass) {
 
         return func;
     } else {
-        func = find_function(name->value.as_string, all_functions);
+        func = find_function(name->value.as_string, &all_functions);
 
         current_function = func;
 
@@ -979,7 +1027,7 @@ Node *parse_function(Lexer *lexer, bool first_pass) {
     }
 }
 
-Node* constant_push(char * name, size_t value, std::vector<Node *> * constants_vector) {
+Node *constant_push(char *name, size_t value, std::vector<Node *> *constants_vector) {
     auto node = new_node(AST_CONSTANT);
     node->constant.name = name;
     node->constant.value = node_from_int_literal(value);
@@ -1022,6 +1070,145 @@ void parse_enum_declaration(Lexer *lexer) {
         }
     }
     lexer->expect(TOKEN_RBRACE);
+}
+
+Node *parse_method(Lexer *lexer, Type *compound) {
+    lexer->expect(TOKEN_FN);
+    auto token = lexer->expect(TOKEN_IDENTIFIER);
+
+    auto func = new_node(AST_FUNCTION);
+    func->function.name = token->value.as_string;
+    func->function.is_method = true;
+    func->function.method_of = compound;
+    func->function.args = new std::vector<Variable *>();
+
+    if (find_function(token->value.as_string, compound->methods) != nullptr) {
+        std::cerr << "Method " << token->value.as_string << " already exists at " << token->location->filename << ":"
+                << token->location->line << ":" << token->location->column << std::endl;
+    }
+
+    compound->methods->push_back(func);
+    current_function = func;
+
+    auto ptr_type = new_type(TYPE_POINTER);
+    ptr_type->ptr = compound;
+
+    auto self_var = new_variable("self", ptr_type, 0);
+    func->function.args->push_back(self_var);
+
+    lexer->expect(TOKEN_LPAREN);
+    parse_function_params(lexer, func);
+    lexer->expect(TOKEN_RPAREN);
+
+    // TODO: check for constructor
+    token = lexer->peek();
+    if (token->type == TOKEN_COLON) {
+        lexer->next();
+        func->etype = parse_type(lexer);
+    } else {
+        func->etype = new_type(TYPE_VOID);
+    }
+
+    func->function.body = parse_block(lexer);
+    current_function = nullptr;
+    return func;
+}
+
+// FIXME: This should just be part of `parse_type()`, and we should be allowed
+//        to parse a type without a name. Probably also need to handle converstions
+//        between structs with similar embedded types.
+Type *parse_struct_union_declaration(Lexer *lexer, bool top_level, int base_offset) {
+    auto token = lexer->next();
+
+    if (token->type != TOKEN_STRUCT && token->type != TOKEN_UNION) {
+        std::cerr << "Expected struct or union at " << token->location->filename << ":" << token->location->line << ":"
+                << token->location->column << std::endl;
+        exit(1);
+    }
+
+    auto compound = new_type(token->type == TOKEN_STRUCT ? TYPE_STRUCT : TYPE_UNION);
+    compound->fields = new std::vector<Variable *>();
+    compound->methods = new std::vector<Node *>();
+
+    token = lexer->peek();
+
+    if (token->type != TOKEN_IDENTIFIER && top_level) {
+        std::cerr << "Expected identifier at " << token->location->filename << ":" << token->location->line << ":" <<
+                token->location->column << std::endl;
+        exit(1);
+    }
+
+    // But if they do provide one, we'll add it to the list of defined structs so they
+    // it can referenced internally.
+    if (token->type == TOKEN_IDENTIFIER) {
+        compound->struct_name = token->value.as_string;
+        compound_types.push_back(compound);
+        token = lexer->next();
+    } else {
+        compound->struct_name = "<anonymous>";
+    }
+
+    lexer->expect(TOKEN_LBRACE);
+
+    token = lexer->peek();
+    while (token->type != TOKEN_RBRACE) {
+        if (token->type == TOKEN_FN) {
+            // method
+            parse_method(lexer, compound);
+        } else {
+            // field
+            char *name = nullptr;
+
+            // We have a named field.
+            if (token->type == TOKEN_IDENTIFIER) {
+                lexer->next();
+                // TODO: Make sure the name doesn't conflict with an existing field. This is a bit
+                //       more annoying than it sounds because we have no-named types.
+                name = token->value.as_string;
+                lexer->expect(TOKEN_COLON);
+                token = lexer->peek();
+            }
+
+            // We want to allow nested temporary structs.
+            Type *type;
+            if (token->type == TOKEN_STRUCT || token->type == TOKEN_UNION) {
+                // Compute the "base offset" for the nested struct, which is the offset from the start
+                // of the struct the last **named** field in the heirarchy above
+                size_t cur_base_offset = 0;
+                if (name == nullptr) {
+                    cur_base_offset = base_offset + (compound->base == TYPE_UNION ? 0 : compound->size);
+                }
+
+                // If the field didn't have a name, we can assign one now, since we know it's a
+                // temporary struct. This name will never be directly referenced, so it's fine.
+                if (name == nullptr) {
+                    name = "<anonymous>";
+                }
+
+                // Nested structs live in their own "namespace", can't be accessed
+                // from outside, so we will pop them off the stack once done.
+                auto prev_compound_count = compound_types.size();
+                type = parse_struct_union_declaration(lexer, false, cur_base_offset);
+                while (compound_types.size() > prev_compound_count) {
+                    compound_types.pop_back();
+                }
+            } else if (name != nullptr) {
+                type = parse_type(lexer);
+            } else {
+                std::cerr << "Expected a name for a non-compound field in struct/union at " << token->location->filename
+                        <<
+                        ":" << token->location->line << ":" << token->location->column << std::endl;
+                exit(1);
+            }
+
+            compound_push_field(compound, name, type, base_offset);
+            lexer->expect(TOKEN_COMMA);
+        }
+
+        token = lexer->peek();
+    }
+    lexer->expect(TOKEN_RBRACE);
+    return compound;
 }
 
 Node *parse_program(Lexer *lexer) {
@@ -1070,7 +1257,30 @@ Node *parse_program(Lexer *lexer) {
                     while (token->type != TOKEN_SEMICOLON) token = lexer->next();
                 } else {
                     parse_enum_declaration(lexer);
-                    lexer->expect(TOKEN_SEMICOLON);
+                    lexer->expect(TOKEN_SEMICOLON); // TODO: maybe remove semicolon
+                }
+            } else if (token->type == TOKEN_STRUCT || token->type == TOKEN_UNION) {
+                if (!first_pass) {
+                    lexer->next(); // Struct or union keyword
+                    lexer->next(); // Struct or union name
+                    token = lexer->expect(TOKEN_LBRACE);
+                    // Skip
+                    size_t brace_count = 1;
+                    while (brace_count > 0) {
+                        token = lexer->next();
+                        if (token->type == TOKEN_LBRACE) {
+                            brace_count++;
+                        } else if (token->type == TOKEN_RBRACE) {
+                            brace_count--;
+                        }
+                    }
+                } else {
+                    auto compound = parse_struct_union_declaration(lexer, true, 0);
+                    // Add compond methods to block to get generated later, hack
+                    for (auto method: *compound->methods) {
+                        node->block.children->push_back(method);
+                    }
+
                 }
             }
 

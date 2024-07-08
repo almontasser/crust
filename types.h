@@ -44,8 +44,8 @@ struct Type {
     size_t base_offset;
     size_t array_size;
 
-    std::vector<Variable> fields;
-    std::vector<Node> members;
+    std::vector<Variable*>* fields;
+    std::vector<Node*>* methods;
     Node* constructor;
 
     std::vector<Node*>* variants;
@@ -66,5 +66,7 @@ bool is_float_type(const Type* type);
 bool is_int_type(const Type* type);
 
 bool types_equal(const Type* a, const Type* b);
+
+bool is_struct_or_structptr(Type* type);
 
 #endif //TYPES_H

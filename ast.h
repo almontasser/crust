@@ -80,6 +80,8 @@ struct Node {
             Node *body;
             size_t max_locals_size;
             std::vector<Variable *> *args;
+            bool is_method;
+            Type * method_of;
         } function;
 
         struct {
@@ -131,6 +133,12 @@ struct Node {
             char* name;
             Node* value; // must be int literal
         } constant;
+
+        struct {
+            Node* obj;
+            size_t offset;
+            bool is_ptr;
+        } member;
     };
 };
 
@@ -155,5 +163,15 @@ Node *new_node_binop(NodeType type, Node *lhs, Node *rhs);
 Node *node_from_int_literal(uint64_t value);
 
 bool is_binary_op(NodeType type);
+
+size_t compound_push_field(Type * compound, char * name, Type * type, size_t base_offset);
+
+inline size_t align_up(size_t val, int align) {
+    return (val + align - 1) & ~(align - 1);
+}
+
+Variable* compound_find_field(Type* type, char* name);
+
+Node* compound_find_method(Type* type, char* name);
 
 #endif //AST_H

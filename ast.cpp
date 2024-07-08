@@ -5,6 +5,7 @@
 #include "ast.h"
 
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <ostream>
 
@@ -336,4 +337,46 @@ bool is_binary_op(NodeType type) {
     if (type == AST_GT) return true;
     if (type == AST_GEQ) return true;
     return false;
+}
+
+size_t compound_push_field(Type *compound, char *name, Type *type, size_t base_offset) {
+    if (compound->base != TYPE_STRUCT && compound->base != TYPE_UNION) {
+        std::cerr << "Cannot push field to non-compound type" << std::endl;
+        exit(1);
+    }
+
+    auto is_union = compound->base == TYPE_UNION;
+
+    size_t field_size = size_of_type(type);
+    auto offset_factor = std::min(field_size, (size_t)8);
+    auto offset = is_union ? 0 : align_up(compound->size, offset_factor);
+    compound->size = is_union ? std::max(compound->size, field_size) : offset + field_size;
+    compound->fields->push_back(new_variable(name, type, base_offset + offset));
+
+    return offset;
+}
+
+Variable * compound_find_field(Type *type, char *name) {
+    for (auto field: *type->fields) {
+        if (strcmp(field->name, name) == 0) {
+            return field;
+        }
+
+        // If this is an anonymous field, we look inside it:
+        if (strcmp(field->name, "<anonymous>") == 0) {
+            auto inner = compound_find_field(field->type, name);
+            if (inner != nullptr) return inner;
+        }
+    }
+
+    return nullptr;
+}
+
+Node * compound_find_method(Type *type, char *name) {
+    for (auto method: *type->methods) {
+        if (strcmp(method->function.name, name) == 0) {
+            return method;
+        }
+    }
+    return nullptr;
 }

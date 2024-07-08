@@ -122,3 +122,11 @@ bool types_equal(const Type *a, const Type *b) {
     }
     return false;
 }
+
+bool is_struct_or_structptr(Type *type) {
+    if (type->base == TYPE_STRUCT || type->base == TYPE_UNION) return true;
+    if (type->base == TYPE_POINTER) {
+        if (type->ptr->base == TYPE_STRUCT || type->ptr->base == TYPE_UNION) return true;
+    }
+    return false;
+}

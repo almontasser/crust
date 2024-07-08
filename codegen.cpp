@@ -55,10 +55,18 @@ void emit_num(const int n) {
 
 char _function_name[256];
 
-char *get_function_name(Node *node) {
-    // TODO: Handle struct methods and constructors
-    // concat "func_" with the function name
-    snprintf(_function_name, sizeof(_function_name), "func_%s", node->function.name);
+char *get_function_name(Node *func) {
+    _function_name[0] = 0;
+    if (func->function.is_method) {
+        auto type = func->function.method_of;
+        snprintf(_function_name, sizeof(_function_name), "_%s_method_%s", type->struct_name, func->function.name);
+    // } else if (func->function.is_constructor) {
+    //     // TODO: Handle struct constructors
+    //
+    } else {
+        // concat "func_" with the function name
+        snprintf(_function_name, sizeof(_function_name), "func_%s", func->function.name);
+    }
     return _function_name;
 }
 
@@ -116,13 +124,12 @@ void generate_lvalue_into_rax(Node * node) {
         emit_asm("\tmov rax, qword gvars\n");
         emit_asm("\tadd rax, "); emit_num(offset); emit_asm("\n");
     } else if (node->type == AST_MEMBER) {
-        // TODO: Implement struct members
-        // let offset = node->member.offset;
-        // if (node.member.is_ptr)
-        //     generate_expression(node.member.obj);
-        // else
-        //     generate_lvalue_into_rax(node.member.obj);
-        // emit_asm("\tadd rax, "); emit_num(offset); emit_asm("\n");
+        auto offset = node->member.offset;
+        if (node->member.is_ptr)
+            generate_expression(node->member.obj);
+        else
+            generate_lvalue_into_rax(node->member.obj);
+        emit_asm("\tadd rax, "); emit_num(offset); emit_asm("\n");
     } else if (node->type == AST_DEREF) {
         generate_expression(node->expr);
     } else {
