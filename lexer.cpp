@@ -40,7 +40,7 @@ Lexer *Lexer::create_from_file(const char *filename) {
 }
 
 const char *token_type_to_string(const TokenType type) {
-    static_assert(NUM_TOKEN_TYPES == 77, "Exhaustive match in token_type_to_string()");
+    static_assert(NUM_TOKEN_TYPES == 87, "Exhaustive match in token_type_to_string()");
 
     switch (type) {
         case TOKEN_FN: return "TOKEN_FN";
@@ -84,7 +84,9 @@ const char *token_type_to_string(const TokenType type) {
         case TOKEN_CHARLIT: return "TOKEN_CHARLIT";
 
         case TOKEN_STAR: return "TOKEN_STAR";
+        case TOKEN_STAR_EQUAL: return "TOKEN_STAR_EQUAL";
         case TOKEN_SLASH: return "TOKEN_SLASH";
+        case TOKEN_SLASH_EQUAL: return "TOKEN_SLASH_EQUAL";
         case TOKEN_PLUS: return "TOKEN_PLUS";
         case TOKEN_PLUS_EQUAL: return "TOKEN_PLUS_EQUAL";
         case TOKEN_PLUS_PLUS: return "TOKEN_PLUS_PLUS";
@@ -100,13 +102,21 @@ const char *token_type_to_string(const TokenType type) {
         case TOKEN_LEQ: return "TOKEN_LEQ";
         case TOKEN_LT: return "TOKEN_LT";
         case TOKEN_LSHIFT: return "TOKEN_LSHIFT";
+        case TOKEN_LSHIFT_EQUAL: return "TOKEN_LSHIFT_EQUAL";
         case TOKEN_RSHIFT: return "TOKEN_RSHIFT";
+        case TOKEN_RSHIFT_EQUAL: return "TOKEN_RSHIFT_EQUAL";
         case TOKEN_AMPERSAND: return "TOKEN_AMPERAND";
+        case TOKEN_AMPERSAND_EQUAL: return "TOKEN_AMPERSAND_EQUAL";
         case TOKEN_AND: return "TOKEN_AND";
+        case TOKEN_AND_EQUAL: return "TOKEN_AND_EQUAL";
         case TOKEN_BAR: return "TOKEN_BAR";
+        case TOKEN_BAR_EQUAL: return "TOKEN_BAR_EQUAL";
         case TOKEN_OR: return "TOKEN_OR";
+        case TOKEN_OR_EQUAL: return "TOKEN_OR_EQUAL";
         case TOKEN_CARET: return "TOKEN_CARET";
+        case TOKEN_CARET_EQUAL: return "TOKEN_CARET_EQUAL";
         case TOKEN_PERCENT: return "TOKEN_PERCENT";
+        case TOKEN_PERCENT_EQUAL: return "TOKEN_PERCENT_EQUAL";
         case TOKEN_QUESTION: return "TOKEN_QUESTION";
         case TOKEN_TILDE: return "TOKEN_TILDE";
         case TOKEN_LPAREN: return "TOKEN_LPAREN";
@@ -164,8 +174,31 @@ Token *Lexer::next() {
                 position++;
                 break;
 
-            case '*': return make_token(TOKEN_STAR, 1);
-            case '/': return make_token(TOKEN_SLASH, 1);
+            case '*': {
+                if (source[position + 1] == '=') {
+                    return make_token(TOKEN_STAR_EQUAL, 2);
+                }
+                return make_token(TOKEN_STAR, 1);
+            }
+            case '/': {
+                if (source[position + 1] == '/') {
+                    while (source[position] != '\n') {
+                        position++;
+                    }
+                    break;
+                }
+                if (source[position + 1] == '*') {
+                    while (source[position] != '*' && source[position + 1] != '/') {
+                        position++;
+                    }
+                    position += 2;
+                    break;
+                }
+                if (source[position + 1] == '=') {
+                    return make_token(TOKEN_SLASH_EQUAL, 2);
+                }
+                return make_token(TOKEN_SLASH, 1);
+            }
             case '+': {
                 if (source[position + 1] == '+') {
                     return make_token(TOKEN_PLUS_PLUS, 2);
@@ -201,6 +234,9 @@ Token *Lexer::next() {
                     return make_token(TOKEN_GEQ, 2);
                 }
                 if (source[position + 1] == '>') {
+                    if (source[position + 2] == '=') {
+                        return make_token(TOKEN_RSHIFT_EQUAL, 3);
+                    }
                     return make_token(TOKEN_RSHIFT, 2);
                 }
                 return make_token(TOKEN_GT, 1);
@@ -210,24 +246,49 @@ Token *Lexer::next() {
                     return make_token(TOKEN_LEQ, 2);
                 }
                 if (source[position + 1] == '<') {
+                    if (source[position + 2] == '=') {
+                        return make_token(TOKEN_LSHIFT_EQUAL, 3);
+                    }
                     return make_token(TOKEN_LSHIFT, 2);
                 }
                 return make_token(TOKEN_LT, 1);
             }
             case '&': {
                 if (source[position + 1] == '&') {
+                    if (source[position + 2] == '=') {
+                        return make_token(TOKEN_AND_EQUAL, 3);
+                    }
                     return make_token(TOKEN_AND, 2);
+                }
+                if (source[position + 1] == '=') {
+                    return make_token(TOKEN_AMPERSAND_EQUAL, 2);
                 }
                 return make_token(TOKEN_AMPERSAND, 1);
             }
             case '|': {
                 if (source[position + 1] == '|') {
+                    if (source[position + 2] == '=') {
+                        return make_token(TOKEN_OR_EQUAL, 3);
+                    }
                     return make_token(TOKEN_OR, 2);
+                }
+                if (source[position + 1] == '=') {
+                    return make_token(TOKEN_BAR_EQUAL, 2);
                 }
                 return make_token(TOKEN_BAR, 1);
             }
-            case '^': return make_token(TOKEN_CARET, 1);
-            case '%': return make_token(TOKEN_PERCENT, 1);
+            case '^': {
+                if (source[position + 1] == '=') {
+                    return make_token(TOKEN_CARET_EQUAL, 2);
+                }
+                return make_token(TOKEN_CARET, 1);
+            }
+            case '%': {
+                if (source[position + 1] == '=') {
+                    return make_token(TOKEN_PERCENT_EQUAL, 2);
+                }
+                return make_token(TOKEN_PERCENT, 1);
+            }
             case '?': return make_token(TOKEN_QUESTION, 1);
             case '~': return make_token(TOKEN_TILDE, 1);
 
