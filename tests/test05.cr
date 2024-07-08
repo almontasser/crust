@@ -8,8 +8,8 @@ struct Test {
     }
 
     fn add(other: Test*) {
-        self.a = self.a + other.a;
-        self.b = self.b + other.b;
+        self.a += other.a;
+        self.b += other.b;
     }
 }
 
@@ -22,6 +22,7 @@ fn main() {
     let t: Test;
     let t2: Test;
     t.a = 10;
+    t.a -= 1;
     t.b = 20;
     t2.a = 30;
     t2.b = 40;

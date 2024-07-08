@@ -302,6 +302,26 @@ NodeType binary_token_to_op(TokenType type) {
     exit(1);
 }
 
+NodeType compound_assignment_token_to_op(TokenType type) {
+    static_assert(NUM_NODE_TYPES == 43, "Exhaustive match in assignment_token_to_op()");
+
+    if (type == TOKEN_PLUS_EQUAL) return AST_PLUS;
+    if (type == TOKEN_MINUS_EQUAL) return AST_MINUS;
+    if (type == TOKEN_STAR_EQUAL) return AST_MUL;
+    if (type == TOKEN_SLASH_EQUAL) return AST_DIV;
+    if (type == TOKEN_PERCENT_EQUAL) return AST_MOD;
+    if (type == TOKEN_LSHIFT_EQUAL) return AST_LSHIFT;
+    if (type == TOKEN_RSHIFT_EQUAL) return AST_RSHIFT;
+    if (type == TOKEN_AND_EQUAL) return AST_AND;
+    if (type == TOKEN_OR_EQUAL) return AST_OR;
+    if (type == TOKEN_CARET_EQUAL) return AST_XOR;
+    if (type == TOKEN_AMPERSAND_EQUAL) return AST_BWAND;
+    if (type == TOKEN_BAR_EQUAL) return AST_BWOR;
+
+    std::cerr << "Unknown assignment operator: " << type << std::endl;
+    exit(1);
+}
+
 Node *new_node_binop(NodeType type, Node *lhs, Node *rhs) {
     auto node = new_node(type);
     node->binary.lhs = lhs;

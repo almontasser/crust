@@ -158,6 +158,8 @@ Node *type_check_binary(Node *node, Token *token);
 
 NodeType binary_token_to_op(TokenType type);
 
+NodeType compound_assignment_token_to_op(TokenType type);
+
 Node *new_node_binop(NodeType type, Node *lhs, Node *rhs);
 
 Node *node_from_int_literal(uint64_t value);

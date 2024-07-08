@@ -713,6 +713,29 @@ Node *parse_expression(Lexer *lexer) {
             node->assign.lhs = lhs;
             node->assign.rhs = rhs;
             lhs = node;
+        } else if (token->type == TOKEN_PLUS_EQUAL || token->type == TOKEN_MINUS_EQUAL) {
+            // TODO: implement other compound assignments
+            lexer->next();
+            auto node = new_node(AST_ASSIGN);
+            auto rhs = parse_expression(lexer);
+
+            auto op = new_node(compound_assignment_token_to_op(token->type));
+            op->binary.lhs = lhs;
+            op->binary.rhs = rhs;
+            op = type_check_binary(op, token);
+
+            auto conv = convert_type(lhs->etype, op);
+            if (conv == nullptr) {
+                std::cerr << "Cannot convert " << op->etype->base << " to " << lhs->etype->base << " at " << token->
+                        location->filename << ":"
+                        << token->location->line << ":" << token->location->column << std::endl;
+                exit(1);
+            }
+
+            node->etype = lhs->etype;
+            node->assign.lhs = lhs;
+            node->assign.rhs = op;
+            lhs = node;
         }
     }
     return lhs;
