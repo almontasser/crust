@@ -60,9 +60,9 @@ char *get_function_name(Node *func) {
     if (func->function.is_method) {
         auto type = func->function.method_of;
         snprintf(_function_name, sizeof(_function_name), "_%s_method_%s", type->struct_name, func->function.name);
-    // } else if (func->function.is_constructor) {
-    //     // TODO: Handle struct constructors
-    //
+    } else if (func->function.is_constructor) {
+        auto type = func->function.method_of;
+        snprintf(_function_name, sizeof(_function_name), "new_%s_constructor", type->struct_name);
     } else {
         // concat "func_" with the function name
         snprintf(_function_name, sizeof(_function_name), "func_%s", func->function.name);
@@ -213,7 +213,8 @@ void generate_binop_int_arith(Node * node) {
 
 void generate_expression(Node *node) {
     if (node->type == AST_LITERAL) {
-        if (is_int_type(node->etype)) {
+        // TODO: Maybe we should make bool literal as int type
+        if (is_int_type(node->etype) || node->etype->base == TYPE_BOOL) {
             emit_asm("\tmov rax, ");
             emit_num(node->literal.as_int);
             emit_asm("\n");
@@ -433,6 +434,27 @@ void generate_statement(Node *node) {
             generate_statement(node->conditional.els);
             emit_asm(".if_end_"); emit_num(label); emit_asm(":\n");
         }
+    } else if (node->type == AST_FOR) {
+        auto label = ++gen_label_counter;
+        auto prev_break = gen_current_break;
+        gen_current_break = label;
+        if (node->loop.init) {
+            generate_statement(node->loop.init);
+        }
+        emit_asm(".loop_start_"); emit_num(label); emit_asm(":\n");
+        if (node->loop.condition) {
+            generate_expression(node->loop.condition);
+            emit_asm("\tcmp rax, 0\n");
+            emit_asm("\tje .loop_end_"); emit_num(label); emit_asm("\n");
+        }
+        generate_statement(node->loop.body);
+        emit_asm(".loop_continue_"); emit_num(label); emit_asm(":\n");
+        if (node->loop.step)
+            generate_statement(node->loop.step);
+        emit_asm("\tjmp .loop_start_"); emit_num(label); emit_asm("\n");
+        emit_asm(".break_"); emit_num(label); emit_asm(":\n");
+        emit_asm(".loop_end_"); emit_num(label); emit_asm(":\n");
+        gen_current_break = prev_break;
     } else {
         generate_expression(node);
     }
@@ -538,6 +560,19 @@ void generate_builtins() {
         }
         emit_asm("\tret\n");
     }
+
+    emit_asm("func_fork:\n");
+    emit_asm("\tmov rdi, [rsp+8]\n");
+    emit_asm("\tmov rax, "); emit_num(SYSCALL_FORK); emit_asm("\n");
+    emit_asm("\tsyscall\n");
+    if (OS_IS_MACOS) {
+        // If rdx is 0, we are in the child, so set rax to 0 to match Linux
+        emit_asm("\tcmp rdx, 0\n");
+        emit_asm("\tje .L1\n");
+        emit_asm("\tmov rax, 0\n");
+        emit_asm(".L1:\n");
+    }
+    emit_asm("\tret\n");
 }
 
 void generate_program(Node *ast, FILE *file) {

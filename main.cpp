@@ -35,7 +35,7 @@ void run_command_env(char** args, char** envp, bool echo) {
 }
 
 int main(char** argv, int argc, char** envp) {
-    char *filename = "../tests/test05.cr";
+    char *filename = "../tests/test06.cr";
     const auto lexer = Lexer::create_from_file(filename);
     if (lexer == nullptr) {
         std::cerr << "Failed to open file: " << filename << std::endl;
@@ -50,9 +50,9 @@ int main(char** argv, int argc, char** envp) {
 
     auto ast = parse_program(lexer);
 
-    char* asm_filename = "../tests/test05.yasm";
-    char* obj_filename = "../tests/test05.o";
-    char* executable_filename = "../tests/test05";
+    char* asm_filename = "../tests/test06.yasm";
+    char* obj_filename = "../tests/test06.o";
+    char* executable_filename = "../tests/test06";
 
     auto out_file = fopen(asm_filename, "w");
     generate_program(ast, out_file);

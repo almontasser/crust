@@ -40,7 +40,7 @@ Lexer *Lexer::create_from_file(const char *filename) {
 }
 
 const char *token_type_to_string(const TokenType type) {
-    static_assert(NUM_TOKEN_TYPES == 87, "Exhaustive match in token_type_to_string()");
+    static_assert(NUM_TOKEN_TYPES == 88, "Exhaustive match in token_type_to_string()");
 
     switch (type) {
         case TOKEN_FN: return "TOKEN_FN";
@@ -76,6 +76,8 @@ const char *token_type_to_string(const TokenType type) {
         case TOKEN_FOR: return "TOKEN_FOR";
         case TOKEN_TRUE: return "TOKEN_TRUE";
         case TOKEN_FALSE: return "TOKEN_FALSE";
+        case TOKEN_CONST: return "TOKEN_CONST";
+        // case TOKEN_NULL: return "TOKEN_NULL";
 
         case TOKEN_INTLIT: return "TOKEN_INTLIT";
         case TOKEN_IDENTIFIER: return "TOKEN_IDENTIFIER";
@@ -367,7 +369,7 @@ Token *Lexer::next() {
                         return token;
                     }
                 }
-                if (isalpha(c)) {
+                if (isalpha(c) || c == '_') {
                     size_t count = 1;
                     while (isalnum(source[position + count]) || source[position + count] == '_') {
                         count++;
@@ -472,6 +474,23 @@ Token *Lexer::next() {
                         if (keyword == "false") {
                             return make_token(TOKEN_FALSE, count);
                         }
+                        if (keyword == "const") {
+                            return make_token(TOKEN_CONST, count);
+                        }
+                        // if (keyword == "null") {
+                        //     return make_token(TOKEN_NULL, count);
+                        // }
+
+                        // Handle the "here" keyword
+                        if (keyword == "here") {
+                            char* s = static_cast<char*>(malloc(128)); // should be enough
+                            sprintf(s, "%s:%zu:%zu", filename, line, column);
+
+                            auto token = make_token(TOKEN_STRINGLIT, count);
+                            token->value.as_string = s;
+                            return token;
+                        }
+
                         const auto identifier = static_cast<char *>(malloc(count + 1));
                         strncpy(identifier, source + position, count);
                         identifier[count] = '\0';

@@ -82,7 +82,7 @@ Variable *new_variable(char *name, Type *type, size_t offset) {
 }
 
 bool is_lvalue(NodeType type) {
-    static_assert(NUM_NODE_TYPES == 43, "Exhaustive match in is_lvalue()");
+    static_assert(NUM_NODE_TYPES == 44, "Exhaustive match in is_lvalue()");
     if (type == AST_LOCAL_VAR) return true;
     if (type == AST_GLOBAL_VAR) return true;
     if (type == AST_MEMBER) return true;
@@ -103,7 +103,7 @@ Node *decay_array_to_pointer(Node *node, Token *token) {
 }
 
 Node *type_check_unary(Node *node, Token *token) {
-    static_assert(NUM_NODE_TYPES == 43, "Exhaustive match in type_check_unary()");
+    static_assert(NUM_NODE_TYPES == 44, "Exhaustive match in type_check_unary()");
 
     auto old_type = node->expr->etype;
 
@@ -151,7 +151,7 @@ Node *type_check_unary(Node *node, Token *token) {
 }
 
 Node *type_check_binary(Node *node, Token *token) {
-    static_assert(NUM_NODE_TYPES == 43, "Exhaustive match in type_check_binary()");
+    static_assert(NUM_NODE_TYPES == 44, "Exhaustive match in type_check_binary()");
 
     auto lhs = node->binary.lhs->etype;
     auto rhs = node->binary.rhs->etype;
@@ -199,7 +199,7 @@ Node *type_check_binary(Node *node, Token *token) {
             node->binary.lhs = convert_to_float(node->binary.lhs);
             node->binary.rhs = convert_to_float(node->binary.rhs);
         } else {
-            std::cerr << "Invalid types for addition at " << token->location->filename << token->location->line << ":"
+            std::cerr << "Invalid types for addition at " << token->location->filename << ":" << token->location->line << ":"
                     << token->location->column << std::endl;
             exit(1);
         }
@@ -239,7 +239,7 @@ Node *type_check_binary(Node *node, Token *token) {
             node->binary.lhs = convert_to_float(node->binary.lhs);
             node->binary.rhs = convert_to_float(node->binary.rhs);
         } else {
-            std::cerr << "Invalid types for subtraction at " << token->location->filename << token->location->line <<
+            std::cerr << "Invalid types for subtraction at " << token->location->filename <<":" << token->location->line <<
                     ":"
                     << token->location->column << std::endl;
             exit(1);
@@ -249,7 +249,7 @@ Node *type_check_binary(Node *node, Token *token) {
             node->etype = lhs; // TODO: Check for overflow
         } else if (is_float_type(lhs) || is_float_type(rhs)) {
             if (node->type == AST_MOD) {
-                std::cerr << "Cannot perform modulo on float types at " << token->location->filename << token->location
+                std::cerr << "Cannot perform modulo on float types at " << token->location->filename << ":" << token->location
                         ->line
                         << ":" << token->location->column << std::endl;
                 exit(1);
@@ -264,6 +264,33 @@ Node *type_check_binary(Node *node, Token *token) {
                     location->line << ":" << token->location->column << std::endl;
             exit(1);
         }
+    } else if (node->type == AST_EQ || node->type == AST_NEQ || node->type == AST_LT || node->type == AST_LEQ || node->type
+            == AST_GT || node->type == AST_GEQ) {
+        if (is_int_type(lhs) && is_int_type(rhs)) {
+            node->etype = new_type(TYPE_BOOL);
+        } else if (is_float_type(lhs) || is_float_type(rhs)) {
+            node->etype = new_type(TYPE_BOOL);
+            node->binary.lhs = convert_to_float(node->binary.lhs);
+            node->binary.rhs = convert_to_float(node->binary.rhs);
+        } else if (lhs->base == TYPE_POINTER && rhs->base == TYPE_POINTER) {
+            node->etype = new_type(TYPE_BOOL);
+            // if (!types_equal(lhs->ptr, rhs->ptr)) {
+            //     std::cerr << "Cannot compare pointers of different types at " << token->location->filename << ":" << token->
+            //             location->line << ":" << token->location->column << std::endl;
+            //     exit(1);
+            // }
+        } else {
+            std::cerr << "Invalid types for comparison at " << token->location->filename << ":" << token->location->line
+                    << ":" << token->location->column << std::endl;
+            exit(1);
+        }
+    } else if (node->type == AST_AND || node->type == AST_OR) {
+        if (lhs->base != TYPE_BOOL || rhs->base != TYPE_BOOL) {
+            std::cerr << "Invalid types for logical operation at " << token->location->filename << ":" << token->location->line
+                    << ":" << token->location->column << std::endl;
+            exit(1);
+        }
+        node->etype = new_type(TYPE_BOOL);
     } else {
         // FIXME: This isn't very correct, but it's probably good enough for now
         node->etype = new_type(TYPE_U64);
@@ -277,7 +304,7 @@ Node *type_check_binary(Node *node, Token *token) {
 }
 
 NodeType binary_token_to_op(TokenType type) {
-    static_assert(NUM_NODE_TYPES == 43, "Exhaustive match in binary_token_to_op()");
+    static_assert(NUM_NODE_TYPES == 44, "Exhaustive match in binary_token_to_op()");
 
     if (type == TOKEN_PLUS) return AST_PLUS;
     if (type == TOKEN_MINUS) return AST_MINUS;
@@ -303,7 +330,7 @@ NodeType binary_token_to_op(TokenType type) {
 }
 
 NodeType compound_assignment_token_to_op(TokenType type) {
-    static_assert(NUM_NODE_TYPES == 43, "Exhaustive match in assignment_token_to_op()");
+    static_assert(NUM_NODE_TYPES == 44, "Exhaustive match in assignment_token_to_op()");
 
     if (type == TOKEN_PLUS_EQUAL) return AST_PLUS;
     if (type == TOKEN_MINUS_EQUAL) return AST_MINUS;
@@ -337,7 +364,7 @@ Node *node_from_int_literal(uint64_t value) {
 }
 
 bool is_binary_op(NodeType type) {
-    static_assert(NUM_NODE_TYPES == 43, "Exhaustive match in is_binary_op");
+    static_assert(NUM_NODE_TYPES == 44, "Exhaustive match in is_binary_op");
     if (type == AST_PLUS) return true;
     if (type == AST_MINUS) return true;
     if (type == AST_MUL) return true;

@@ -62,6 +62,7 @@ enum NodeType {
     AST_IF,
     AST_ENUM,
     AST_CONSTANT,
+    AST_FOR,
 
     NUM_NODE_TYPES,
 };
@@ -81,6 +82,7 @@ struct Node {
             size_t max_locals_size;
             std::vector<Variable *> *args;
             bool is_method;
+            bool is_constructor;
             Type * method_of;
         } function;
 

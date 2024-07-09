@@ -10,6 +10,7 @@
 
 constexpr int SYSCALL_WRITE = 1;
 constexpr int SYSCALL_EXIT = 60;
+constexpr int SYSCALL_FORK = 57;
 
 void generate_program(Node* ast, FILE* file);
 
