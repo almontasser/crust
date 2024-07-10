@@ -1,3 +1,5 @@
+#include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <unistd.h>
 
@@ -34,8 +36,13 @@ void run_command_env(char** args, char** envp, bool echo) {
     }
 }
 
+char* get_parent_path(const char* filename) {
+    std::filesystem::path path = filename;
+    return strdup(path.parent_path().c_str());
+}
+
 int main(char** argv, int argc, char** envp) {
-    char *filename = "../tests/test06.cr";
+    char *filename = "../tests/test07.cr";
     const auto lexer = Lexer::create_from_file(filename);
     if (lexer == nullptr) {
         std::cerr << "Failed to open file: " << filename << std::endl;
@@ -48,11 +55,15 @@ int main(char** argv, int argc, char** envp) {
     //     token = lexer->next();
     // }
 
+    // add the current directory to the import paths
+    import_paths.push_back(canonicalize_file_name("../"));
+    import_paths.push_back(get_parent_path(canonicalize_file_name(filename)));
+
     auto ast = parse_program(lexer);
 
-    char* asm_filename = "../tests/test06.yasm";
-    char* obj_filename = "../tests/test06.o";
-    char* executable_filename = "../tests/test06";
+    char* asm_filename = "../tests/test07.yasm";
+    char* obj_filename = "../tests/test07.o";
+    char* executable_filename = "../tests/test07";
 
     auto out_file = fopen(asm_filename, "w");
     generate_program(ast, out_file);

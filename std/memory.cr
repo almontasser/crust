@@ -1,4 +1,4 @@
-import "../std/common.cr"
+import "std/common.cr"
 
 // FIXME: This is horrible for performance.
 fn memcpy(dest: void*, src: void*, size: u64): void* {

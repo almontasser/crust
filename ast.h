@@ -63,6 +63,8 @@ enum NodeType {
     AST_ENUM,
     AST_CONSTANT,
     AST_FOR,
+    AST_MATCH,
+    AST_CASE,
 
     NUM_NODE_TYPES,
 };
@@ -141,6 +143,17 @@ struct Node {
             size_t offset;
             bool is_ptr;
         } member;
+
+        struct {
+            Node* expr;
+            std::vector<Node*>* cases;
+            Node* defolt;
+        } match;
+
+        struct {
+            uint64_t value;
+            Node* stmt;
+        } case_stmt;
     };
 };
 

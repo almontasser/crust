@@ -25,6 +25,8 @@ void generate_block(Node *node);
 
 void generate_expression(Node *node);
 
+void generate_statement(Node *node);
+
 void emit_asm(const char *s) {
     fwrite(s, 1, strlen(s), gen_out_file);
 }
@@ -365,6 +367,34 @@ void generate_expression(Node *node) {
     }
 }
 
+void generate_match_statement(Node * node) {
+    auto label = ++gen_label_counter;
+
+    generate_expression(node->match.expr); // Guaranteed to be an integer in `rax`
+    auto all_cases = node->match.cases;
+    size_t i = 0;
+    for (auto cur_case: *all_cases) {
+        auto case_value = cur_case->case_stmt.value;
+        emit_asm("\tcmp rax, "); emit_num(case_value); emit_asm("\n");
+        emit_asm("\tje .case_"); emit_num(label); emit_asm("_"); emit_num(i++); emit_asm("\n");
+    }
+    emit_asm("\tjmp .default_"); emit_num(label); emit_asm("\n");
+
+    i = 0;
+    for (auto cur_case: *all_cases) {
+        auto case_value = cur_case->case_stmt.value;
+        emit_asm(".case_"); emit_num(label); emit_asm("_"); emit_num(i++); emit_asm(":\n");
+        generate_statement(cur_case->case_stmt.stmt);
+        emit_asm("\tjmp .exit_"); emit_num(label); emit_asm("\n");
+    }
+
+    emit_asm(".default_"); emit_num(label); emit_asm(":\n");
+    if (node->match.defolt) {
+        generate_statement(node->match.defolt);
+    }
+    emit_asm("\t.exit_"); emit_num(label); emit_asm(":\n");
+}
+
 void generate_statement(Node *node) {
     if (node->type == AST_RETURN) {
         if (node->expr) {
@@ -405,8 +435,12 @@ void generate_statement(Node *node) {
         emit_asm(".loop_end_"); emit_num(label); emit_asm(":\n");
         gen_current_break = prev_break;
     } else if (node->type == AST_CONTINUE) {
-        // TODO: Implement continue
-        std::cerr << "Continue statement not implemented" << std::endl;
+        if (gen_current_break < 0) {
+            std::cerr << "Continue statement outside of loop, should have been caught by parser" << std::endl;
+            exit(1);
+        }
+
+        emit_asm("\tjmp .loop_continue_"); emit_num(gen_current_break); emit_asm("\n");
     } else if (node->type == AST_BREAK) {
         if (gen_current_break < 0) {
             std::cerr << "Break statement outside of loop, should have been caught by parser" << std::endl;
@@ -455,6 +489,8 @@ void generate_statement(Node *node) {
         emit_asm(".break_"); emit_num(label); emit_asm(":\n");
         emit_asm(".loop_end_"); emit_num(label); emit_asm(":\n");
         gen_current_break = prev_break;
+    } else if (node->type == AST_MATCH) {
+        generate_match_statement(node);
     } else {
         generate_expression(node);
     }

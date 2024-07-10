@@ -9,6 +9,7 @@
 
 inline auto global_variables = std::vector<Variable *>();
 inline auto global_offset = 0;
+inline auto import_paths = std::vector<char *>();
 
 Node* parse_program(Lexer* lexer);
 Node * parse_block(Lexer * lexer);

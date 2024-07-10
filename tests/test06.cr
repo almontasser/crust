@@ -1,4 +1,4 @@
-import "../std/memory.cr"
+import "std/memory.cr"
 
 struct Point {
     x: u32;
@@ -19,6 +19,30 @@ struct Point {
 }
 
 fn main() {
-    let p: Point* = new Point(10, 20);
-    p.print();
+    for (let i = 0; i < 10; ++i) {
+        let p: Point* = new Point(i, i * 2);
+        p.print();
+        continue;
+    }
+    let i = 0;
+    while (i < 10) {
+        let p: Point* = new Point(i, i * 2);
+        p.print();
+        ++i;
+        continue;
+    }
+    for (i = 0; i < 10; ++i) {
+        break;
+        let p: Point* = new Point(i, i * 2);
+        p.print();
+        continue;
+    }
+    i = 0;
+    while (i < 10) {
+        break;
+        let p: Point* = new Point(i, i * 2);
+        p.print();
+        ++i;
+        continue;
+    }
 }

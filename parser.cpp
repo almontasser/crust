@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <cstring>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <ostream>
 
@@ -962,6 +963,64 @@ Node *parse_for_loop(Lexer *lexer) {
     return node;
 }
 
+Node * parse_match_statement(Lexer * lexer) {
+    lexer->expect(TOKEN_MATCH);
+
+    auto node = new_node(AST_MATCH);
+
+    lexer->expect(TOKEN_LPAREN);
+
+    node->match.expr = parse_expression(lexer);
+    if (!is_int_type(node->match.expr->etype)) {
+        std::cerr << "Match expression must be an integer type at " << lexer->peek()->location->filename << ":" << lexer
+                ->peek()->location->line << ":" << lexer->peek()->location->column << std::endl;
+        exit(1);
+    }
+
+    node->match.cases = new std::vector<Node *>();
+    // breakable_stack.push_back(node);
+
+    lexer->expect(TOKEN_RPAREN);
+    lexer->expect(TOKEN_LBRACE);
+
+    auto token = lexer->peek();
+    while (token->type != TOKEN_RBRACE) {
+        if (token->type == TOKEN_DEFAULT) {
+            lexer->next();
+            lexer->expect(TOKEN_COLON);
+            token = lexer->peek();
+
+            auto stmt = parse_statement(lexer);
+            node->match.defolt = stmt;
+
+            token = lexer->peek();
+            if (token->type != TOKEN_RBRACE) {
+                std::cerr << "Expected '}' at " << token->location->filename << ":" << token->location->line << ":" << token
+                        ->location->column << std::endl;
+                exit(1);
+            }
+        } else if (token->type == TOKEN_INTLIT || token->type == TOKEN_IDENTIFIER) {
+            auto case_stmt = new_node(AST_CASE);
+            case_stmt->case_stmt.value = parse_constant_expression(lexer);
+
+            lexer->expect(TOKEN_COLON);
+
+            auto stmt = parse_statement(lexer);
+                case_stmt->case_stmt.stmt = stmt;
+
+            node->match.cases->push_back(case_stmt);
+        } else {
+            std::cerr << "Unexpected token: " << token->type << " at " << token->location->filename << ":" << token->
+                    location->line << ":" << token->location->column << std::endl;
+            exit(1);
+        }
+        token = lexer->peek();
+    }
+    // breakable_stack.pop_back();
+    lexer->expect(TOKEN_RBRACE);
+    return node;
+}
+
 Node *parse_statement(Lexer *lexer) {
     Node *node = nullptr;
 
@@ -1050,6 +1109,8 @@ Node *parse_statement(Lexer *lexer) {
         lexer->expect(TOKEN_SEMICOLON);
     } else if (token->type == TOKEN_FOR) {
         node = parse_for_loop(lexer);
+    } else if (token->type == TOKEN_MATCH) {
+        node = parse_match_statement(lexer);
     } else {
         // Default to expression statement
         node = parse_expression(lexer);
@@ -1503,7 +1564,33 @@ Node *parse_program(Lexer *lexer) {
                 auto path = lexer->expect(TOKEN_STRINGLIT);
 
                 auto already_imported = false;
-                const auto absolute_path = canonicalize_file_name(path->value.as_string);
+                if (path->value.as_string[0] == '.') {
+                    std::cerr << "Relative imports are not supported at " << path->location->filename << ":" << path->
+                            location->line << ":" << path->location->column << std::endl;
+                    exit(1);
+                }
+                char* absolute_path = nullptr;
+                for (auto ip: import_paths) {
+                    auto joined = new char[strlen(ip) + strlen(path->value.as_string) + 2];
+                    strcpy(joined, ip);
+                    if (ip[strlen(ip) - 1] != '/') {
+                        strcat(joined, "/");
+                    }
+                    strcat(joined, path->value.as_string);
+
+                    // Check if file exists
+                    if (std::filesystem::exists(joined)) {
+                        absolute_path = joined;
+                        break;
+                    }
+                }
+
+                if (absolute_path == nullptr) {
+                    std::cerr << "File " << path->value.as_string << " not found at " << path->location->filename << ":"
+                            << path->location->line << ":" << path->location->column << std::endl;
+                    exit(1);
+                }
+
                 for (const auto l: lexer_stack) {
                     if (strcmp(l->filename, absolute_path) == 0) {
                         already_imported = true;
