@@ -86,6 +86,7 @@ struct Node {
             std::vector<Variable *> *args;
             bool is_method;
             bool is_constructor;
+            bool is_disposer;
             Type * method_of;
         } function;
 

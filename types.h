@@ -47,6 +47,7 @@ struct Type {
     std::vector<Variable*>* fields;
     std::vector<Node*>* methods;
     Node* constructor;
+    Node* disposer;
 
     std::vector<Node*>* variants;
 };

@@ -40,7 +40,7 @@ Lexer *Lexer::create_from_file(const char *filename) {
 }
 
 const char *token_type_to_string(const TokenType type) {
-    static_assert(NUM_TOKEN_TYPES == 88, "Exhaustive match in token_type_to_string()");
+    static_assert(NUM_TOKEN_TYPES == 89, "Exhaustive match in token_type_to_string()");
 
     switch (type) {
         case TOKEN_FN: return "TOKEN_FN";
@@ -70,6 +70,7 @@ const char *token_type_to_string(const TokenType type) {
         case TOKEN_ENUM: return "TOKEN_ENUM";
         case TOKEN_UNION: return "TOKEN_UNION";
         case TOKEN_NEW: return "TOKEN_NEW";
+        case TOKEN_DELETE: return "TOKEN_DELETE";
         case TOKEN_DEFER: return "TOKEN_DEFER";
         case TOKEN_MATCH: return "TOKEN_MATCH";
         case TOKEN_DEFAULT: return "TOKEN_DEFAULT";
@@ -455,6 +456,9 @@ Token *Lexer::next() {
                         }
                         if (keyword == "new") {
                             return make_token(TOKEN_NEW, count);
+                        }
+                        if (keyword == "delete") {
+                            return make_token(TOKEN_DELETE, count);
                         }
                         if (keyword == "defer") {
                             return make_token(TOKEN_DEFER, count);

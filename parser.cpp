@@ -26,6 +26,7 @@ auto constants = std::vector<Node *>();
 
 // Default memory allocator for new
 char* default_allocator = "malloc";
+char* default_deallocator = "free";
 
 Node *parse_expression(Lexer *lexer);
 
@@ -55,6 +56,7 @@ void initialize_builtins() {
     node->function.name = "print";
     node->function.is_method = false;
     node->function.is_constructor = false;
+    node->function.is_disposer = false;
     node->function.args = new std::vector<Variable *>();
     node->function.args->push_back(new_variable("val", new_type(TYPE_ANY), 0));
     builtin_functions.push_back(node);
@@ -1021,6 +1023,68 @@ Node * parse_match_statement(Lexer * lexer) {
     return node;
 }
 
+Node * parse_delete_statement(Lexer * lexer) {
+    lexer->expect(TOKEN_DELETE);
+
+    auto token = lexer->peek();
+    auto node = parse_identifier(lexer);
+    if (node == nullptr) {
+        std::cerr << "Variable " << token->value.as_string << " not found at " << token->location->filename << ":" << token
+                ->location->line << ":" << token->location->column << std::endl;
+        exit(1);
+    }
+
+    if (node->variable->type->base != TYPE_POINTER) {
+        std::cerr << "Cannot free non-pointer type at " << token->location->filename << ":" << token->location->line << ":"
+                << token->location->column << std::endl;
+        exit(1);
+    }
+
+    Node* disposer = nullptr;
+    if (node->variable->type->ptr->base == TYPE_STRUCT || node->variable->type->ptr->base == TYPE_UNION) {
+        disposer = node->variable->type->ptr->disposer;
+    }
+
+    Node* expr = new_node(AST_BLOCK);
+    expr->block.children = new std::vector<Node*>();
+
+    auto pos = lexer->position;
+    auto line = lexer->line;
+    auto column = lexer->column;
+    if (disposer != nullptr) {
+        expr->block.children->push_back(parse_function_call_args(lexer, disposer, node));
+        lexer->position = pos;
+        lexer->line = line;
+        lexer->column = column;
+    }
+
+    auto deallocator = find_function(default_deallocator, &all_functions);
+    if (deallocator == nullptr) {
+        std::cerr << "Could not find default deallocator function: " << default_deallocator << " at " << token->location
+                ->filename << ":" << token->
+                location->line << ":" << token->location->column << std::endl;
+        exit(1);
+    }
+
+    expr->block.children->push_back(parse_function_call_args(lexer, deallocator, node));
+
+    // assign null to the variable
+    auto null_var = find_global_variable("null");
+    auto null = new_node(AST_GLOBAL_VAR);
+    null->variable = null_var;
+    null->etype = null_var->type;
+
+    auto assign = new_node(AST_ASSIGN);
+    assign->assign.lhs = node;
+    assign->assign.rhs = null;
+    assign->etype = node->variable->type;
+    expr->block.children->push_back(assign);
+
+    lexer->expect(TOKEN_SEMICOLON);
+
+    return expr;
+}
+
 Node *parse_statement(Lexer *lexer) {
     Node *node = nullptr;
 
@@ -1115,6 +1179,8 @@ Node *parse_statement(Lexer *lexer) {
         lexer->next();
         node = new_node(AST_DEFER);
         node->expr = parse_statement(lexer);
+    } else if (token->type == TOKEN_DELETE) {
+        node = parse_delete_statement(lexer);
     } else {
         // Default to expression statement
         node = parse_expression(lexer);
@@ -1203,6 +1269,7 @@ Node *parse_function(Lexer *lexer, bool first_pass) {
         func->function.args = new std::vector<Variable *>();
         func->function.is_method = false;
         func->function.is_constructor = false;
+        func->function.is_disposer = false;
 
         if (identifier_exists(name->value.as_string)) {
             std::cerr << "Function " << name->value.as_string << " already exists" << std::endl;
@@ -1310,12 +1377,14 @@ Node *parse_method(Lexer *lexer, Type *compound) {
     auto token = lexer->next();
 
     auto is_constructor = token->type == TOKEN_NEW;
+    auto is_disposer = token->type == TOKEN_DELETE;
 
     auto func = new_node(AST_FUNCTION);
     func->function.name = token->value.as_string;
     func->function.method_of = compound;
     func->function.is_constructor = is_constructor;
-    func->function.is_method = !is_constructor;
+    func->function.is_method = !is_constructor && !is_disposer;
+    func->function.is_disposer = is_disposer;
 
     func->function.args = new std::vector<Variable *>();
 
@@ -1334,6 +1403,15 @@ Node *parse_method(Lexer *lexer, Type *compound) {
 
         func->etype = ptr_type;
         compound->constructor = func;
+    } else if (is_disposer) {
+        if (compound->disposer != nullptr) {
+            std::cerr << "Disposer already exists at " << token->location->filename << ":" << token->location->line <<
+                    ":" << token->location->column << std::endl;
+            exit(1);
+        }
+
+        func->etype = new_type(TYPE_VOID);
+        compound->disposer = func;
     } else {
         if (find_function(token->value.as_string, compound->methods) != nullptr) {
             std::cerr << "Method " << token->value.as_string << " already exists at " << token->location->filename <<
@@ -1364,7 +1442,7 @@ Node *parse_method(Lexer *lexer, Type *compound) {
     }
 
     func->function.body = parse_block(lexer);
-    if (is_constructor) {
+    if (is_constructor || is_disposer) {
         auto ret = new_node(AST_RETURN);
         ret->expr = new_node(AST_LOCAL_VAR);
         ret->expr->variable = find_local_variable("self");
@@ -1654,6 +1732,9 @@ Node *parse_program(Lexer *lexer) {
                     }
                     if (compound->constructor != nullptr) {
                         node->block.children->push_back(compound->constructor);
+                    }
+                    if (compound->disposer != nullptr) {
+                        node->block.children->push_back(compound->disposer);
                     }
                 }
             } else {

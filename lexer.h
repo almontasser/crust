@@ -51,6 +51,7 @@ enum TokenType {
     TOKEN_ENUM,
     TOKEN_UNION,
     TOKEN_NEW,
+    TOKEN_DELETE,
     TOKEN_DEFER,
     TOKEN_MATCH,
     TOKEN_DEFAULT,

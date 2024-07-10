@@ -67,6 +67,9 @@ char *get_function_name(Node *func) {
     } else if (func->function.is_constructor) {
         auto type = func->function.method_of;
         snprintf(_function_name, sizeof(_function_name), "new_%s_constructor", type->struct_name);
+    } else if (func->function.is_disposer) {
+        auto type = func->function.method_of;
+        snprintf(_function_name, sizeof(_function_name), "dispose_%s", type->struct_name);
     } else {
         // concat "func_" with the function name
         snprintf(_function_name, sizeof(_function_name), "func_%s", func->function.name);
