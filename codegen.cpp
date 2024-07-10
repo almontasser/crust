@@ -439,6 +439,7 @@ void generate_statement(Node *node) {
     } else if (node->type == AST_WHILE) {
         auto label = ++gen_label_counter;
         auto prev_break = gen_current_break;
+        auto prev_loop_defer_count = loop_defer_count;
         loop_defer_count = defers.size();
         gen_current_break = label;
         emit_asm(".loop_start_"); emit_num(label); emit_asm(":\n");
@@ -451,6 +452,7 @@ void generate_statement(Node *node) {
         emit_asm(".break_"); emit_num(label); emit_asm(":\n");
         emit_asm(".loop_end_"); emit_num(label); emit_asm(":\n");
         gen_current_break = prev_break;
+        loop_defer_count = prev_loop_defer_count;
     } else if (node->type == AST_CONTINUE) {
         if (gen_current_break < 0) {
             std::cerr << "Continue statement outside of loop, should have been caught by parser" << std::endl;
@@ -496,6 +498,7 @@ void generate_statement(Node *node) {
     } else if (node->type == AST_FOR) {
         auto label = ++gen_label_counter;
         auto prev_break = gen_current_break;
+        auto prev_loop_defer_count = loop_defer_count;
         loop_defer_count = defers.size();
         gen_current_break = label;
         if (node->loop.init) {
@@ -515,6 +518,7 @@ void generate_statement(Node *node) {
         emit_asm(".break_"); emit_num(label); emit_asm(":\n");
         emit_asm(".loop_end_"); emit_num(label); emit_asm(":\n");
         gen_current_break = prev_break;
+        loop_defer_count = prev_loop_defer_count;
     } else if (node->type == AST_MATCH) {
         generate_match_statement(node);
     } else if (node->type == AST_DEFER) {

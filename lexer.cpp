@@ -526,7 +526,6 @@ Token *Lexer::next() {
                     strncpy(value, source + position + 1, count - 2);
                     value[count - 2] = '\0';
 
-                    // TODO: handle escape sequences
                     size_t o_pos = 0;
                     size_t n_pos = 0;
                     while (o_pos < count - 1) {

@@ -16,6 +16,17 @@ const SYS_EXIT = 60;
 const SYS_WAIT4 = 61;
 const SYS_OPENAT = 257;
 
+const PROT_READ = 0x1;
+const PROT_WRITE = 0x2;
+const PROT_EXEC = 0x4;
+const PROT_NONE = 0x0;
+
+const MAP_SHARED = 0x01;
+const MAP_PRIVATE = 0x02;
+const MAP_SHARED_VALIDATE = 0x03;
+
+let MAP_FAILED: void* = -1;
+
 fn write(fd: u64, s: void*, n: u64): u64 {
     return syscall3(SYS_WRITE, fd, s, n);
 }

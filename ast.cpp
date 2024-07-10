@@ -12,7 +12,7 @@
 #include "types.h"
 
 Node *new_node(NodeType type) {
-    const auto node = static_cast<Node *>(malloc(sizeof(Node)));
+    const auto node = static_cast<Node *>(calloc(1, sizeof(Node)));
     node->type = type;
     return node;
 }
@@ -59,6 +59,10 @@ Node *convert_type(Type *to, Node *from_node) {
         if (from->ptr->base == TYPE_VOID || to->ptr->base == TYPE_VOID) return from_node;
     }
 
+    if (to->base == TYPE_POINTER && is_int_type(from)) {
+        return from_node;
+    }
+
     // TODO: Should we raise a warning if the target type is narrower
     //       than the source type?
     if (is_int_type(from) && is_int_type(to)) return from_node;
@@ -93,7 +97,6 @@ bool is_lvalue(NodeType type) {
 Node *decay_array_to_pointer(Node *node, Token *token) {
     // We can only take the address of an lvalue, so we need to ensure that
     if (is_lvalue(node->type) && node->etype->base == TYPE_ARRAY) {
-        // TODO: Implement this
         auto address = new_node(AST_ADDRESS_OF);
         address->expr = node;
         address = type_check_unary(address, token);

@@ -17,6 +17,7 @@ auto builtin_functions = std::vector<Node *>();
 auto all_functions = std::vector<Node *>();
 
 auto lexer_stack = std::vector<Lexer *>();
+auto imported_files = std::vector<std::string>();
 Node *current_function = nullptr;
 auto block_stack = std::vector<Node *>();
 size_t curr_stack_offset = 0;
@@ -227,30 +228,34 @@ bool identifier_exists(char *name) {
 
 
 // This is used for functions and methods, for methods obj_ptr represents self
-Node *parse_function_call_args(Lexer *lexer, Node *func, Node *obj_ptr) {
+Node *parse_function_call_args(Lexer *lexer, Node *func, Node *obj_ptr, bool is_disposer = false) {
     Node *node = new_node(AST_FUNCTION_CALL);
     node->call.function = func;
     node->call.args = new std::vector<Node *>();
     node->etype = func->etype;
-
-    lexer->expect(TOKEN_LPAREN);
 
     if (obj_ptr != nullptr) {
         node->call.args->push_back(obj_ptr);
     }
 
     auto token = lexer->peek();
-    while (token->type != TOKEN_RPAREN) {
-        auto arg = parse_expression(lexer);
-        node->call.args->push_back(arg);
+    if (is_disposer == false) {
+        lexer->expect(TOKEN_LPAREN);
 
         token = lexer->peek();
-        if (token->type == TOKEN_COMMA) {
-            lexer->next();
-            token - lexer->peek();
+        while (token->type != TOKEN_RPAREN) {
+            auto arg = parse_expression(lexer);
+            node->call.args->push_back(arg);
+
+            token = lexer->peek();
+            if (token->type == TOKEN_COMMA) {
+                lexer->next();
+                token - lexer->peek();
+            }
         }
+        lexer->expect(TOKEN_RPAREN);
     }
-    lexer->expect(TOKEN_RPAREN);
+
     if (node->call.args->size() != func->function.args->size()) {
         std::cerr << "Expected " << func->function.args->size() << " arguments at " << token->location->filename << ":"
                 << token->location->line << ":" << token->location->column << std::endl;
@@ -1052,7 +1057,7 @@ Node * parse_delete_statement(Lexer * lexer) {
     auto line = lexer->line;
     auto column = lexer->column;
     if (disposer != nullptr) {
-        expr->block.children->push_back(parse_function_call_args(lexer, disposer, node));
+        expr->block.children->push_back(parse_function_call_args(lexer, disposer, node, true));
         lexer->position = pos;
         lexer->line = line;
         lexer->column = column;
@@ -1066,7 +1071,7 @@ Node * parse_delete_statement(Lexer * lexer) {
         exit(1);
     }
 
-    expr->block.children->push_back(parse_function_call_args(lexer, deallocator, node));
+    expr->block.children->push_back(parse_function_call_args(lexer, deallocator, node, true));
 
     // assign null to the variable
     auto null_var = find_global_variable("null");
@@ -1265,6 +1270,7 @@ Node *parse_function(Lexer *lexer, bool first_pass) {
     Node *func;
     if (first_pass) {
         func = new_node(AST_FUNCTION);
+        func->function.max_locals_size = 0;
         func->function.name = name->value.as_string;
         func->function.args = new std::vector<Variable *>();
         func->function.is_method = false;
@@ -1673,8 +1679,8 @@ Node *parse_program(Lexer *lexer) {
                     exit(1);
                 }
 
-                for (const auto l: lexer_stack) {
-                    if (strcmp(l->filename, absolute_path) == 0) {
+                for (const auto f: imported_files) {
+                    if (f == absolute_path) {
                         already_imported = true;
                         break;
                     }
@@ -1683,6 +1689,7 @@ Node *parse_program(Lexer *lexer) {
                 if (!already_imported) {
                     lexer = Lexer::create_from_file(absolute_path);
                     lexer_stack.push_back(lexer);
+                    imported_files.push_back(absolute_path);
                 }
             } else if (token->type == TOKEN_FN) {
                 child = parse_function(lexer, first_pass);
@@ -1758,6 +1765,7 @@ Node *parse_program(Lexer *lexer) {
         if (first_pass) {
             first_pass = false;
             lexer->reset();
+            imported_files.clear();
         } else {
             break;
         }

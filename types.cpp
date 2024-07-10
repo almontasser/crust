@@ -39,7 +39,7 @@ size_t size_of_type(const Type *type) { // NOLINT(*-no-recursion)
     static_assert(NUM_BASE_TYPES == 13, "Exhaustive match in size_of_type()");
 
     if (type->base < NUM_BASE_TYPES) return type->size;
-    if (type->base == TYPE_POINTER) return type->size; // TODO: check this
+    if (type->base == TYPE_POINTER) return type->size;
     if (type->base == TYPE_STRUCT) return type->size;
     if (type->base == TYPE_UNION) return type->size;
     if (type->base == TYPE_ENUM) return type->size;
@@ -50,7 +50,7 @@ size_t size_of_type(const Type *type) { // NOLINT(*-no-recursion)
 }
 
 Type * create_new_base_type(const BaseType base) {
-    const auto type = static_cast<Type*>(malloc(sizeof(Type)));
+    const auto type = static_cast<Type*>(calloc(1, sizeof(Type)));
     type->base = base;
     type->size = size_of_base_type(base);
     return type;
@@ -86,7 +86,7 @@ Type * new_type(const BaseType base) {
         case TYPE_VOID: return _type_void;
         case TYPE_ANY: return _type_any;
         default: {
-            const auto type = static_cast<Type*>(malloc(sizeof(Type)));
+            const auto type = static_cast<Type*>(calloc(1, sizeof(Type)));
             type->base = base;
             type->size = size_of_base_type(base);
             return type;

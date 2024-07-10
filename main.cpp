@@ -42,7 +42,7 @@ char* get_parent_path(const char* filename) {
 }
 
 int main(char** argv, int argc, char** envp) {
-    char *filename = "../tests/test09.cr";
+    char *filename = "../tests/test10.cr";
     const auto lexer = Lexer::create_from_file(filename);
     if (lexer == nullptr) {
         std::cerr << "Failed to open file: " << filename << std::endl;
@@ -61,9 +61,9 @@ int main(char** argv, int argc, char** envp) {
 
     auto ast = parse_program(lexer);
 
-    char* asm_filename = "../tests/test09.yasm";
-    char* obj_filename = "../tests/test09.o";
-    char* executable_filename = "../tests/test09";
+    char* asm_filename = "../tests/test10.yasm";
+    char* obj_filename = "../tests/test10.o";
+    char* executable_filename = "../tests/test10";
 
     auto out_file = fopen(asm_filename, "w");
     generate_program(ast, out_file);
@@ -81,7 +81,8 @@ int main(char** argv, int argc, char** envp) {
     cmd_args[3] = "-o";
     cmd_args[4] = obj_filename;
     cmd_args[5] = asm_filename;
-    cmd_args[6] = nullptr;
+    cmd_args[6] = "-gdwarf2";
+    cmd_args[7] = nullptr;
 
     // if (fork() == 0) {
     //     execv("/usr/bin/env", cmd_args);
