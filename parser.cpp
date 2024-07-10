@@ -1111,6 +1111,10 @@ Node *parse_statement(Lexer *lexer) {
         node = parse_for_loop(lexer);
     } else if (token->type == TOKEN_MATCH) {
         node = parse_match_statement(lexer);
+    } else if (token->type == TOKEN_DEFER) {
+        lexer->next();
+        node = new_node(AST_DEFER);
+        node->expr = parse_statement(lexer);
     } else {
         // Default to expression statement
         node = parse_expression(lexer);

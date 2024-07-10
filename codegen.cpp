@@ -20,6 +20,8 @@ auto gen_current_break = -2;
 
 std::vector<char *> gen_string_literals = {};
 std::vector<char *> gen_float_literals = {};
+auto defers = std::vector<Node *>();
+auto loop_defer_count = 0;
 
 void generate_block(Node *node);
 
@@ -403,6 +405,17 @@ void generate_statement(Node *node) {
             emit_asm("\txor rax, rax\n"); // Default to 0
         }
 
+        emit_asm("\tpush rax\n");
+        // We want to "pop off" the defer stack so that nested defers don't loop
+        // forever, but we'll restore it after the generating these
+        auto prev_defer_count = defers.size();
+        while (defers.size() > 0) {
+            generate_statement(defers.back());
+            defers.pop_back();
+        }
+        // defers.size = prev_defer_count; // FIXME:
+        emit_asm("\tpop rax\n");
+
         // TODO: Implement deferred statements
 
         emit_asm("\tmov rsp, rbp\n");
@@ -423,6 +436,7 @@ void generate_statement(Node *node) {
     } else if (node->type == AST_WHILE) {
         auto label = ++gen_label_counter;
         auto prev_break = gen_current_break;
+        loop_defer_count = defers.size();
         gen_current_break = label;
         emit_asm(".loop_start_"); emit_num(label); emit_asm(":\n");
         emit_asm(".loop_continue_"); emit_num(label); emit_asm(":\n");
@@ -440,6 +454,11 @@ void generate_statement(Node *node) {
             exit(1);
         }
 
+        auto i = defers.size();
+        while (i-- > loop_defer_count) {
+            generate_statement(defers.at(i));
+        }
+
         emit_asm("\tjmp .loop_continue_"); emit_num(gen_current_break); emit_asm("\n");
     } else if (node->type == AST_BREAK) {
         if (gen_current_break < 0) {
@@ -447,7 +466,10 @@ void generate_statement(Node *node) {
             exit(1);
         }
 
-        // TODO: Implement deferred statements
+        auto i = defers.size();
+        while (i-- > loop_defer_count) {
+            generate_statement(defers.at(i));
+        }
 
         emit_asm("\tjmp .break_"); emit_num(gen_current_break); emit_asm("\n");
     } else if (node->type == AST_IF) {
@@ -471,6 +493,7 @@ void generate_statement(Node *node) {
     } else if (node->type == AST_FOR) {
         auto label = ++gen_label_counter;
         auto prev_break = gen_current_break;
+        loop_defer_count = defers.size();
         gen_current_break = label;
         if (node->loop.init) {
             generate_statement(node->loop.init);
@@ -491,15 +514,23 @@ void generate_statement(Node *node) {
         gen_current_break = prev_break;
     } else if (node->type == AST_MATCH) {
         generate_match_statement(node);
+    } else if (node->type == AST_DEFER) {
+        defers.push_back(node->expr);
     } else {
         generate_expression(node);
     }
 }
 
 void generate_block(Node *node) {
-    // TODO: Implement deferred statements
+    auto prev_defer_count = defers.size();
+
     for (auto child: *node->block.children) {
         generate_statement(child);
+    }
+
+    while (defers.size() > prev_defer_count) {
+        generate_statement(defers.back());
+        defers.pop_back();
     }
 }
 

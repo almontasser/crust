@@ -65,6 +65,7 @@ enum NodeType {
     AST_FOR,
     AST_MATCH,
     AST_CASE,
+    AST_DEFER,
 
     NUM_NODE_TYPES,
 };
