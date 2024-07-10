@@ -647,6 +647,11 @@ void generate_builtins() {
         emit_asm(".L1:\n");
     }
     emit_asm("\tret\n");
+
+    emit_asm("func_sqrt:\n");
+    emit_asm("\tmovsd xmm0, [rsp+8]\n");
+    emit_asm("\tsqrtsd xmm0, xmm0\n");
+    emit_asm("\tret\n");
 }
 
 void generate_program(Node *ast, FILE *file) {

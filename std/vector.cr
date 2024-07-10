@@ -1,3 +1,5 @@
+import "std/memory.cr"
+
 struct Vector {
     size: u64;
     capacity: u64;

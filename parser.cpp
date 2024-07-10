@@ -62,6 +62,13 @@ void initialize_builtins() {
     node->function.args->push_back(new_variable("val", new_type(TYPE_ANY), 0));
     builtin_functions.push_back(node);
 
+    node = new_node(AST_BUILTIN);
+    node->etype = new_type(TYPE_F64);
+    node->function.name = "sqrt";
+    node->function.args = new std::vector<Variable *>();
+    node->function.args->push_back(new_variable("val", new_type(TYPE_F64), 0));
+    builtin_functions.push_back(node);
+
     // The return value of fork() is weird on macOS, parent/child is returned in rdx
     // and the child pid is returned in rax, so we'll make our own wrapper.
     node = new_node(AST_BUILTIN);
@@ -112,14 +119,14 @@ Type *parse_type(Lexer *lexer) {
             break;
         default: {
             if (token->type != TOKEN_IDENTIFIER) {
-                std::cerr << "Unknown type: " << token->type << " at " << token->location->filename << ":" << token->
+                std::cerr << "Unknown type: " << token->value.as_string << " at " << token->location->filename << ":" << token->
                         location->line << ":" << token->location->column << std::endl;
                 exit(1);
             }
             // TODO: find compound type
             type = find_compound_type(token->value.as_string);
             if (type == nullptr) {
-                std::cerr << "Unknown type: " << token->type << " at " << token->location->filename << ":" << token->
+                std::cerr << "Unknown type: " << token->value.as_string << " at " << token->location->filename << ":" << token->
                         location->line << ":" << token->location->column << std::endl;
                 exit(1);
             }
@@ -1464,6 +1471,7 @@ Node *parse_method(Lexer *lexer, Type *compound) {
 // FIXME: This should just be part of `parse_type()`, and we should be allowed
 //        to parse a type without a name. Probably also need to handle converstions
 //        between structs with similar embedded types.
+// FIXME: We need to prevent circular references in structs.
 Type *parse_struct_union_declaration(Lexer *lexer, bool top_level, int base_offset) {
     auto token = lexer->next();
 

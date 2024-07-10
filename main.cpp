@@ -42,7 +42,7 @@ char* get_parent_path(const char* filename) {
 }
 
 int main(char** argv, int argc, char** envp) {
-    char *filename = "../tests/test10.cr";
+    char *filename = "../tests/raytrace.cr";
     const auto lexer = Lexer::create_from_file(filename);
     if (lexer == nullptr) {
         std::cerr << "Failed to open file: " << filename << std::endl;
@@ -61,9 +61,9 @@ int main(char** argv, int argc, char** envp) {
 
     auto ast = parse_program(lexer);
 
-    char* asm_filename = "../tests/test10.yasm";
-    char* obj_filename = "../tests/test10.o";
-    char* executable_filename = "../tests/test10";
+    char* asm_filename = "../tests/raytrace.yasm";
+    char* obj_filename = "../tests/raytrace.o";
+    char* executable_filename = "../tests/raytrace";
 
     auto out_file = fopen(asm_filename, "w");
     generate_program(ast, out_file);
