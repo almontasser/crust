@@ -8,7 +8,7 @@ fn main() {
     print(random.rand());
     print(random.rand());
     print(random.rand());
-    let f: File* = fopen("/home/mahmoud/projects/crust20/tests/test11.cr", 'a');
+    let f: File* = fopen("/home/mahmoud/projects/crust20/tests/output.txt", 'a');
     f.write("import \"std/memory.cr\"\n\n", 24);
     delete f;
 

@@ -197,7 +197,9 @@ Variable *find_local_variable(char *name) {
 }
 
 Variable *find_global_variable(char *name) {
-    for (auto var: global_variables) {
+    auto n = global_variables.size();
+    for (int i = n - 1; i >= 0; --i) {
+        auto var = global_variables[i];
         if (strcmp(var->name, name) == 0) {
             return var;
         }
@@ -876,14 +878,14 @@ Node *parse_var_declaration(Lexer *lexer) {
     lexer->expect(TOKEN_LET);
     auto token = lexer->expect(TOKEN_IDENTIFIER);
 
-    if (identifier_exists(token->value.as_string)) {
+    auto is_global = current_function == nullptr;
+
+    if (identifier_exists(token->value.as_string) && is_global) {
         std::cerr << "Identifier " << token->value.as_string << " already exists at " << token->location->filename <<
                 ":" << token->
                 location->line << ":" << token->location->column << std::endl;
         exit(1);
     }
-
-    auto is_global = current_function == nullptr;
 
     auto node = new_node(AST_VAR_DECLARATION);
     node->var_decl.var.name = token->value.as_string;

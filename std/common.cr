@@ -235,9 +235,41 @@ fn putu_buffer(n: u64, buf: u8*): u64 {
     return i;
 }
 
+fn puti_buffer(n: i64, buf: u8*): u64 {
+    let i: u64 = 0;
+    let sign: i64 = 1;
+    if (n < 0) {
+        sign = -1;
+        n = -n;
+    }
+    while (n > 0) {
+        buf[i] = (n % 10) + '0';
+        n = n / 10;
+        i = i + 1;
+    }
+    if (i == 0) {
+        buf[i] = '0';
+        i = i + 1;
+    }
+    if (sign < 0) {
+        buf[i] = '-';
+        i = i + 1;
+    }
+    buf[i] = 0;
+    if (i > 1)
+        strrev(buf);
+    return i;
+}
+
 fn putu(n: u64) {
     let buf: u8[32];
     let len = putu_buffer(n, buf);
+    write(stdout, buf, len);
+}
+
+fn puti(n: i64) {
+    let buf: u8[32];
+    let len = puti_buffer(n, buf);
     write(stdout, buf, len);
 }
 
@@ -275,7 +307,7 @@ fn die2(sloc: u8 *, msg1: u8 *, msg2: u8*) {
 }
 
 // TODO: file/line numbers would be helpful
-fn assert(sloc: u8*, cond: u64) {
+fn assert(sloc: u8*, cond: bool) {
     if (!cond)
         die(sloc, "assertion failed");
 }
