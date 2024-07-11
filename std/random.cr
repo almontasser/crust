@@ -8,8 +8,10 @@ struct RandomState {
 
     fn rand(): i32 {
         if (!seeded) {
-            self.x = 123456789;
-            self.y = 362436069;
+            let seed: u32;
+            syscall1(201, &seed); // get time
+            self.x = 123456789 ^ seed;
+            self.y = 362436069 ^ seed;
             self.z = 521288629;
             self.w = 88675123;
             seeded = true;
