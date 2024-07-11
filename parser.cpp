@@ -162,7 +162,7 @@ void block_stack_push(Node *node) {
 void block_stack_pop() {
     auto block = block_stack.back();
     block_stack.pop_back();
-    curr_stack_offset -= block->block.locals->size();
+    curr_stack_offset -= block->block.locals_size;
 }
 
 Node *find_function(char *name, const std::vector<Node *> *nodes) {
@@ -972,7 +972,7 @@ Node *parse_for_loop(Lexer *lexer) {
     breakable_stack.push_back(loop);
     loop->loop.body = parse_statement(lexer);
     breakable_stack.pop_back();
-    block_stack.pop_back();
+    block_stack_pop();
 
     return node;
 }
