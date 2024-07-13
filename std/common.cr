@@ -137,7 +137,7 @@ fn strrev(s: u8 *) {
 
 fn atoi_end(s: u8 *, end: u8**): u64 {
     let i: u64 = 0;
-    let _sign: u64 = 1;
+    let _sign: i8 = 1;
     if (*s == '-') {
         _sign = -1;
         s = s + 1;
