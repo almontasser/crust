@@ -720,7 +720,7 @@ void generate_program(Node *ast, FILE *file) {
             const auto offset = node->var_decl.var.offset;
             emit_asm("\tmov rcx, qword gvars\n");
             emit_asm("\tadd rcx, "); emit_num(offset); emit_asm("\n");
-            emit_asm3("\tmov [rcx], ", subregister_for_type(expr->etype), "\n");
+            emit_asm3("\tmov [rcx], ", subregister_for_type(node->var_decl.var.type), "\n");
         }
     }
 
