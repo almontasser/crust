@@ -157,6 +157,8 @@ struct Node {
             Node* stmt;
         } case_stmt;
     };
+
+    void dump(int depth);
 };
 
 Node *new_node(NodeType type);

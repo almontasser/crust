@@ -109,10 +109,16 @@ bool is_int_type(const Type *type) {
            type->base == TYPE_U8 || type->base == TYPE_U16 || type->base == TYPE_U32 || type->base == TYPE_U64;
 }
 
+bool is_signed_int_type(const Type *type) {
+    return type->base == TYPE_I8 || type->base == TYPE_I16 || type->base == TYPE_I32 || type->base == TYPE_I64;
+}
+
 bool types_equal(const Type *a, const Type *b) {
     if (a == nullptr && b == nullptr) return true;
     if (a == nullptr || b == nullptr) return false;
     if (a->base == TYPE_ANY || b->base == TYPE_ANY) return true;
+
+    if (is_int_type(a) && is_int_type(b)) return true;
 
     if (a->base == b->base) {
         if (a->base == TYPE_STRUCT || a->base == TYPE_UNION || a->base == TYPE_ENUM) {
@@ -129,4 +135,71 @@ bool is_struct_or_structptr(Type *type) {
         if (type->ptr->base == TYPE_STRUCT || type->ptr->base == TYPE_UNION) return true;
     }
     return false;
+}
+
+char * create_type_string(Type *type) {
+    auto buf = static_cast<char*>(malloc(32));
+    while (type->base == TYPE_POINTER || type->base == TYPE_ARRAY) {
+        strcat(buf, type->base == TYPE_POINTER ? "*" : "[]");
+        type = type->ptr;
+    }
+
+    static_assert(NUM_BASE_TYPES == 13, "Exhaustive match in create_type_string()");
+
+    switch (type->base) {
+        case TYPE_I8:
+            strcat(buf, "i8");
+            break;
+        case TYPE_I16:
+            strcat(buf, "i16");
+            break;
+        case TYPE_I32:
+            strcat(buf, "i32");
+            break;
+        case TYPE_I64:
+            strcat(buf, "i64");
+            break;
+        case TYPE_U8:
+            strcat(buf, "u8");
+            break;
+        case TYPE_U16:
+            strcat(buf, "u16");
+            break;
+        case TYPE_U32:
+            strcat(buf, "u32");
+            break;
+        case TYPE_U64:
+            strcat(buf, "u64");
+            break;
+        case TYPE_F32:
+            strcat(buf, "f32");
+            break;
+        case TYPE_F64:
+            strcat(buf, "f64");
+            break;
+        case TYPE_BOOL:
+            strcat(buf, "bool");
+            break;
+        case TYPE_VOID:
+            strcat(buf, "void");
+            break;
+        case TYPE_ANY:
+            strcat(buf, "any");
+            break;
+        case TYPE_STRUCT:
+            strcat(buf, type->struct_name);
+            break;
+        case TYPE_UNION:
+            strcat(buf, type->struct_name);
+            break;
+        case TYPE_ENUM:
+            strcat(buf, type->struct_name);
+            break;
+        default: {
+            std::cerr << "Unknown type: " << type->base << std::endl;
+            exit(1);
+        }
+    }
+
+    return buf;
 }

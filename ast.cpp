@@ -145,6 +145,12 @@ Node *type_check_unary(Node *node, Token *token) {
                     << ":" << token->location->column << std::endl;
             exit(1);
         }
+
+        Type* type = old_type;
+        if (old_type->base == TYPE_U8) old_type = new_type(TYPE_I16);
+        if (old_type->base == TYPE_U16) old_type = new_type(TYPE_I32);
+        if (old_type->base == TYPE_U32) old_type = new_type(TYPE_I64);
+        if (old_type->base == TYPE_U64) old_type = new_type(TYPE_I64); // TODO: Check for overflow
         node->etype = old_type;
     } else {
         // Default to not changing the type
@@ -389,6 +395,16 @@ bool is_binary_op(NodeType type) {
     return false;
 }
 
+bool is_unary_op(NodeType type) {
+    static_assert(NUM_NODE_TYPES == 47, "Exhaustive match in is_unary_op");
+    if (type == AST_NEG) return true;
+    if (type == AST_NOT) return true;
+    if (type == AST_BWINV) return true;
+    if (type == AST_ADDRESS_OF) return true;
+    if (type == AST_DEREF) return true;
+    return false;
+}
+
 size_t compound_push_field(Type *compound, char *name, Type *type, size_t base_offset) {
     if (compound->base != TYPE_STRUCT && compound->base != TYPE_UNION) {
         std::cerr << "Cannot push field to non-compound type" << std::endl;
@@ -429,4 +445,144 @@ Node * compound_find_method(Type *type, char *name) {
         }
     }
     return nullptr;
+}
+
+char* node_type_to_string(NodeType type) {
+    static_assert(NUM_NODE_TYPES == 47, "Exhaustive match in node_type_to_string()");
+    switch (type) {
+        case AST_LITERAL: return "AST_LITERAL";
+        case AST_FUNCTION: return "AST_FUNCTION";
+        case AST_RETURN: return "AST_RETURN";
+        case AST_PROGRAM: return "AST_PROGRAM";
+        case AST_BLOCK: return "AST_BLOCK";
+        case AST_CONVERT: return "AST_CONVERT";
+        case AST_BUILTIN: return "AST_BUILTIN";
+        case AST_LOCAL_VAR: return "AST_LOCAL_VAR";
+        case AST_GLOBAL_VAR: return "AST_GLOBAL_VAR";
+        case AST_DEREF: return "AST_DEREF";
+        case AST_MEMBER: return "AST_MEMBER";
+        case AST_FUNCTION_CALL: return "AST_FUNCTION_CALL";
+        case AST_VAR_DECLARATION: return "AST_VAR_DECLARATION";
+        case AST_WHILE: return "AST_WHILE";
+        case AST_CONTINUE: return "AST_CONTINUE";
+        case AST_BREAK: return "AST_BREAK";
+        case AST_ADDRESS_OF: return "AST_ADDRESS_OF";
+        case AST_NEG: return "AST_NEG";
+        case AST_NOT: return "AST_NOT";
+        case AST_MUL: return "AST_MUL";
+        case AST_EQ: return "AST_EQ";
+        case AST_NEQ: return "AST_NEQ";
+        case AST_ASSIGN: return "AST_ASSIGN";
+        case AST_PLUS: return "AST_PLUS";
+        case AST_CONDITIONAL: return "AST_CONDITIONAL";
+        case AST_BWINV: return "AST_BWINV";
+        case AST_MINUS: return "AST_MINUS";
+        case AST_DIV: return "AST_DIV";
+        case AST_MOD: return "AST_MOD";
+        case AST_LSHIFT: return "AST_LSHIFT";
+        case AST_RSHIFT: return "AST_RSHIFT";
+        case AST_AND: return "AST_AND";
+        case AST_BWAND: return "AST_BWAND";
+        case AST_OR: return "AST_OR";
+        case AST_BWOR: return "AST_BWOR";
+        case AST_XOR: return "AST_XOR";
+        case AST_LT: return "AST_LT";
+        case AST_LEQ: return "AST_LEQ";
+        case AST_GT: return "AST_GT";
+        case AST_GEQ: return "AST_GEQ";
+        case AST_IF: return "AST_IF";
+        case AST_ENUM: return "AST_ENUM";
+        case AST_CONSTANT: return "AST_CONSTANT";
+        case AST_FOR: return "AST_FOR";
+        case AST_MATCH: return "AST_MATCH";
+        case AST_CASE: return "AST_CASE";
+        case AST_DEFER: return "AST_DEFER";
+        case NUM_NODE_TYPES: return "NUM_NODE_TYPES";
+    }
+
+    std::cerr << "Unknown node type in node_type_to_string(): " << type << std::endl;
+    exit(1);
+}
+
+void Node::dump(int depth) {
+    for (auto i = 0; i < depth; i++) {
+        std::cout << "  ";
+    }
+    if (this->type == AST_PROGRAM || this->type == AST_BLOCK) {
+        std::cout << node_type_to_string(this->type) << std::endl;
+        for (auto stmt: *this->block.children) {
+            stmt->dump(depth + 1);
+        }
+    } else if (is_binary_op(this->type)) {
+        std::cout << node_type_to_string(this->type) << std::endl;
+        this->binary.lhs->dump(depth + 1);
+        this->binary.rhs->dump(depth + 1);
+    } else if (is_unary_op(this->type) || this->type == AST_RETURN) {
+        std::cout << node_type_to_string(this->type) << std::endl;
+        this->expr->dump(depth + 1);
+    } else if (this->type == AST_CONDITIONAL || this->type == AST_IF) {
+        std::cout << node_type_to_string(this->type) << std::endl;
+        this->conditional.condition->dump(depth + 1);
+        this->conditional.then->dump(depth + 1);
+        if (this->conditional.els) {
+            this->conditional.els->dump(depth + 1);
+        }
+    } else if (this->type == AST_LITERAL) {
+        if (is_int_type(this->etype)) {
+            std::cout << this->literal.as_int << std::endl;
+        } else if (this->etype->base == TYPE_POINTER) {
+            std::cout << "\"" << this->literal.as_string << "\"" << std::endl;
+            // TODO: add char
+        } else if (is_float_type(this->etype)) {
+            std::cout << this->literal.as_string << std::endl;
+        } else if (this->etype->base == TYPE_BOOL) {
+            std::cout << (this->literal.as_int ? "true" : "false") << std::endl;
+        } else {
+            std::cerr << "Unknown literal type" << std::endl;
+            exit(1);
+        }
+    } else if (this->type == AST_FUNCTION) {
+        std::cout << "fn " << this->function.name << "()" << std::endl;
+        if (this->function.body != nullptr) {
+            this->function.body->dump(depth + 1);
+        }
+    } else if (this->type == AST_VAR_DECLARATION) {
+        puts("let "); puts(this->var_decl.var.name);
+        if (this->var_decl.var.type->base == TYPE_POINTER) {
+            puts(": ");
+            puts(create_type_string(this->var_decl.var.type));
+        }
+        if (this->var_decl.init) {
+            puts(" =\n");
+            this->var_decl.init->dump(depth + 1);
+        } else {
+            std::cout << std::endl;
+        }
+    } else if (this->type == AST_ASSIGN) {
+        std::cout << node_type_to_string(this->type) << std::endl;
+        this->assign.lhs->dump(depth + 1);
+        this->assign.rhs->dump(depth + 1);
+    } else if (this->type == AST_LOCAL_VAR || this->type == AST_GLOBAL_VAR) {
+        std::cout << this->variable->name << std::endl;
+    } else if (this->type == AST_CONVERT) {
+        std::cout<< "(" << create_type_string(this->etype) << ")" << std::endl;
+        this->expr->dump(depth + 1);
+    } else if (this->type == AST_CASE) {
+        std::cout << "case " << this->case_stmt.value << ":" << std::endl;
+        this->case_stmt.stmt->dump(depth + 1);
+    } else if (this->type == AST_MATCH) {
+        std::cout << "MATCH" << std::endl;
+        this->match.expr->dump(depth + 1);
+        for (auto i = 0; i < this->match.cases->size(); ++i) {
+            this->match.cases->at(i)->dump(depth + 2);
+        }
+        if (this->match.defolt) {
+            for (auto i = 0; i < (depth+2); ++i)
+                std::cout << "  ";
+            std::cout << "default:" << std::endl;
+            this->match.defolt->dump(depth + 3);
+        }
+    } else {
+        std::cout << node_type_to_string(this->type) << std::endl;
+    }
 }

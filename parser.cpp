@@ -25,10 +25,6 @@ auto breakable_stack = std::vector<Node *>();
 auto compound_types = std::vector<Type *>();
 auto constants = std::vector<Node *>();
 
-// Default memory allocator for new
-char* default_allocator = "malloc";
-char* default_deallocator = "free";
-
 Node *parse_expression(Lexer *lexer);
 
 Type *find_compound_type(char *name);
@@ -353,10 +349,23 @@ Node *parse_literal(Lexer *lexer) {
     auto token = lexer->next();
 
     switch (token->type) {
-        case TOKEN_INTLIT:
-            node->literal.as_int = token->value.as_int;
-            node->etype = new_type(TYPE_I64);
+        case TOKEN_INTLIT: {
+            uint64_t value = token->value.as_int;
+            Type* type;
+            if (value <= 0xFF) {
+                type = new_type(TYPE_U8);
+            } else if (value <= 0xFFFF) {
+                type = new_type(TYPE_U16);
+            } else if (value <= 0xFFFFFFFF) {
+                type = new_type(TYPE_U32);
+            } else {
+                type = new_type(TYPE_U64);
+            }
+
+            node->literal.as_int = value;
+            node->etype = type;
             break;
+        }
         case TOKEN_STRINGLIT:
             node->literal.as_string = token->value.as_string;
             node->etype = new_ptr_type(TYPE_U8); // TODO: Maybe add char type

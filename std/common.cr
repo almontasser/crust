@@ -237,21 +237,22 @@ fn putu_buffer(n: u64, buf: u8*): u64 {
 
 fn puti_buffer(n: i64, buf: u8*): u64 {
     let i: u64 = 0;
-    let sign: i64 = 1;
+    let num: u64;
     if (n < 0) {
-        sign = -1;
-        n = -n;
+        num = -n;
+    } else {
+        num = n;
     }
-    while (n > 0) {
-        buf[i] = (n % 10) + '0';
-        n = n / 10;
+    while (num > 0) {
+        buf[i] = (num % 10) + '0';
+        num = num / 10;
         i = i + 1;
     }
     if (i == 0) {
         buf[i] = '0';
         i = i + 1;
     }
-    if (sign < 0) {
+    if (n < 0) {
         buf[i] = '-';
         i = i + 1;
     }
@@ -323,7 +324,7 @@ fn max(a: u64, b: u64): u64 {
     return a > b ? a : b;
 }
 
-fn sign(a: u64): u64 {
+fn sign(a: i64): i64 {
     return a > 0 ? 1 : a == 0 ? 0 : -1;
 }
 

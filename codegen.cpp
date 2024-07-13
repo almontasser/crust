@@ -190,31 +190,36 @@ void generate_binop_int_arith(Node * node) {
     generate_expression(node->binary.lhs);
     emit_asm("\tpop rcx\n");
 
-    char* op = nullptr;
-    if (node->type == AST_PLUS) op = "add";
-    else if (node->type == AST_MINUS) op = "sub";
-    else if (node->type == AST_LSHIFT) op = "shl";
-    else if (node->type == AST_RSHIFT) op = "shr";
-    else if (node->type == AST_BWAND) op = "and";
-    else if (node->type == AST_BWOR) op = "or";
-    else if (node->type == AST_XOR) op = "xor";
-    else if (node->type == AST_MUL) op = "imul";
-    else if (node->type == AST_DIV) op = "idiv";
-    else if (node->type == AST_MOD) op = "idiv";
+    char* s_op = nullptr;
+    char* u_op = nullptr;
+    if (node->type == AST_PLUS) { s_op = "add"; u_op = "add"; }
+    else if (node->type == AST_MINUS) { s_op = "sub"; u_op = "sub"; }
+    else if (node->type == AST_LSHIFT) { s_op = "shl"; u_op = "shl"; }
+    else if (node->type == AST_RSHIFT) { s_op = "shr"; u_op = "shr"; }
+    else if (node->type == AST_BWAND) { s_op = "and"; u_op = "and"; }
+    else if (node->type == AST_BWOR) { s_op = "or"; u_op = "or"; }
+    else if (node->type == AST_XOR) { s_op = "xor"; u_op = "xor"; }
+    else if (node->type == AST_MUL) { s_op = "imul"; u_op = "mul"; }
+    else if (node->type == AST_DIV) { s_op = "idiv"; u_op = "div"; }
+    else if (node->type == AST_MOD) { s_op = "idiv"; u_op = "div"; }
     else {
         std::cerr << "Unsupported binary op in generate_binop_int_arith: " << node->type << std::endl;
         exit(1);
     }
 
+    bool is_signed = is_signed_int_type(node->binary.lhs->etype) || is_signed_int_type(node->binary.rhs->etype);
+
     if (node->type == AST_DIV || node->type == AST_MOD) {
-        emit_asm("\tcqo\n");
-        emit_asm("\tidiv rcx\n");
+        emit_asm3("\t", is_signed ? "cqo" : "xor rdx, rdx", "\n");
+        emit_asm3("\t", is_signed ? s_op : u_op, " rcx\n");
         if (node->type == AST_MOD)
             emit_asm("\tmov rax, rdx\n");
     } else if (node->type == AST_LSHIFT || node->type == AST_RSHIFT) {
-        emit_asm3("\t", op, " rax, cl\n");
+        emit_asm3("\t", is_signed ? s_op : u_op, " rax, cl\n");
+    } else if (node->type == AST_MUL) {
+        emit_asm3("\t", is_signed ? s_op : u_op, " rcx\n");
     } else {
-        emit_asm3("\t", op, " rax, rcx\n");
+        emit_asm3("\t", is_signed ? s_op : u_op, " rax, rcx\n");
     }
 }
 
@@ -322,7 +327,12 @@ void generate_expression(Node *node) {
             emit_asm3("\t", u_op, " al\n");
         } else {
             generate_cmp_int(node);
-            emit_asm3("\t", s_op, " al\n");
+            bool is_signed = is_signed_int_type(node->binary.lhs->etype) || is_signed_int_type(node->binary.rhs->etype);
+            if (is_signed) {
+                emit_asm3("\t", s_op, " al\n");
+            } else {
+                emit_asm3("\t", u_op, " al\n");
+            }
         }
         emit_asm("\tmovzx rax, al\n");
     } else if (node->type == AST_BWINV) {

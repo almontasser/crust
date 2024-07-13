@@ -11,6 +11,9 @@ inline auto global_variables = std::vector<Variable *>();
 inline auto global_offset = 0;
 inline auto import_paths = std::vector<char *>();
 
+inline char* default_allocator = "malloc";
+inline char* default_deallocator = "free";
+
 Node* parse_program(Lexer* lexer);
 Node * parse_block(Lexer * lexer);
 

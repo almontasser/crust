@@ -323,20 +323,20 @@ Token *Lexer::next() {
                         while (isxdigit(source[position + count])) {
                             count++;
                         }
-                        value = std::stoll(std::string(source + position, count), nullptr, 16);
+                        value = std::stoull(std::string(source + position, count), nullptr, 16);
                         // Octal 0 prefixed
                     } else if (source[position] == '0' && isdigit(source[position + 1])) {
                         while (isdigit(source[position + count])) {
                             count++;
                         }
-                        value = std::stoll(std::string(source + position, count), nullptr, 8);
+                        value = std::stoull(std::string(source + position, count), nullptr, 8);
                         // Binary 0b prefixed
                     } else if (source[position] == '0' && source[position + 1] == 'b') {
                         count += 2;
                         while (source[position + count] == '0' || source[position + count] == '1') {
                             count++;
                         }
-                        value = std::stoll(std::string(source + position, count), nullptr, 2);
+                        value = std::stoull(std::string(source + position, count), nullptr, 2);
                         // Base 10
                     } else {
                         while (position + count < strlen(source) && isdigit(source[position + count])) {
@@ -349,7 +349,7 @@ Token *Lexer::next() {
                                 count++;
                             }
                         } else {
-                            value = std::stoll(std::string(source + position, count));
+                            value = std::stoull(std::string(source + position, count));
                         }
                     }
 

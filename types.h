@@ -66,8 +66,12 @@ bool is_float_type(const Type* type);
 
 bool is_int_type(const Type* type);
 
+bool is_signed_int_type(const Type* type);
+
 bool types_equal(const Type* a, const Type* b);
 
 bool is_struct_or_structptr(Type* type);
+
+char* create_type_string(Type* type);
 
 #endif //TYPES_H
