@@ -1,2 +1,0 @@
-10
-Hello world

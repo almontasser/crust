@@ -1,8 +1,0 @@
-fn main() {
-  let i: u8;
-  i = 1;
-  while (i <= 10) {
-    printint(i);
-    i = i + 1;
-  }
-}

@@ -1,7 +1,0 @@
-fn main()
-{
-  let i: u8;
-  for (i= 1; i <= 10; i= i + 1) {
-    printint(i);
-  }
-}

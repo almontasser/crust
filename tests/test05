@@ -1,9 +1,0 @@
-fn main() {
-  let i: u8; let j: u8;
-  i=6; j=12;
-  if (i < j) {
-    printint(i);
-  } else {
-    printint(j);
-  }
-}
