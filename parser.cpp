@@ -913,7 +913,13 @@ Node *parse_var_declaration(Lexer *lexer) {
         node->var_decl.init = parse_expression(lexer);
 
         if (missing_type) {
-            node->var_decl.var.type = node->var_decl.init->etype;
+            Type* type = node->var_decl.init->etype;
+            if (is_signed_int_type(type)) {
+                type = new_type(TYPE_I64);
+            } else if (is_int_type(type)) {
+                type = new_type(TYPE_U64);
+            }
+            node->var_decl.var.type = type;
         } else {
             auto conv = convert_type(node->var_decl.var.type, node->var_decl.init);
             if (conv == nullptr) {
