@@ -1,0 +1,24 @@
+extern fn open(pathname: *char, flags: u32): u32;
+extern fn read(fd: u32, buf: *char, count: u32): u32;
+extern fn write(fd: u32, buf: *char, count: u32): u32;
+extern fn close(fd: u32): u32;
+
+let buf: *char;
+
+fn main(): u32 {
+  let zin: u32;
+  let cnt: u32;
+
+  buf= "                                                             ";
+  zin = open("test30", 0);
+  if (zin == -1) {
+    return 1;
+  }
+  cnt = read(zin, buf, 60);
+  while (cnt > 0) {
+    write(1, buf, cnt);
+    cnt = read(zin, buf, 60);
+  }
+  close(zin);
+  return 0;
+}
