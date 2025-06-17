@@ -41,6 +41,7 @@ pub enum TokenType {
     I64,
     While,
     Char,
+    Extern,
 
     // Single-character tokens
     Add,
@@ -119,6 +120,7 @@ impl Lexer {
                 keywords.insert(String::from("i64"), TokenType::I64);
                 keywords.insert(String::from("while"), TokenType::While);
                 keywords.insert(String::from("char"), TokenType::Char);
+                keywords.insert(String::from("extern"), TokenType::Extern);
                 keywords
             },
             string_labels: Vec::new(),

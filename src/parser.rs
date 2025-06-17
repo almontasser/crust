@@ -121,7 +121,9 @@ impl Parser {
     pub fn parse(&mut self) -> &Vec<Node> {
         // first pass
         while !self.is_at_end() {
-            if self.match_token(vec![TokenType::Let]) {
+            if self.check(TokenType::Extern) {
+                self.extern_fn_decl(true);
+            } else if self.match_token(vec![TokenType::Let]) {
                 let node = self.var_decl(false);
                 self.expect(vec![TokenType::SemiColon]).unwrap();
                 self.nodes.push(node);
@@ -136,7 +138,10 @@ impl Parser {
         self.current = 0;
         while !self.is_at_end() {
             // skip global variables since we already parsed it in the first pass
-            if self.match_token(vec![TokenType::Let]) {
+            if self.check(TokenType::Extern) {
+                self.extern_fn_decl(false);
+                continue;
+            } else if self.match_token(vec![TokenType::Let]) {
                 while !self.match_token(vec![TokenType::SemiColon]) {
                     self.advance();
                 }
@@ -1105,6 +1110,32 @@ impl Parser {
             return_type: ty,
             params,
         })
+    }
+
+    fn extern_fn_decl(&mut self, first_pass: bool) {
+        self.expect(vec![TokenType::Extern]).unwrap();
+        self.expect(vec![TokenType::Fn]).unwrap();
+        let identifier = self.expect(vec![TokenType::Identifier]).unwrap();
+        self.expect(vec![TokenType::LeftParen]).unwrap();
+        self.reset_offset();
+        let params = self.parse_params(true);
+        self.expect(vec![TokenType::RightParen]).unwrap();
+        let mut ty: Option<Type> = None;
+        if self.match_token(vec![TokenType::Colon]) {
+            ty = Some(self.parse_type());
+        }
+        if first_pass {
+            self.add_symbol(
+                identifier,
+                SymbolType::Function,
+                StorageClass::Global,
+                ty,
+                None,
+                None,
+                Some(params),
+            );
+        }
+        self.expect(vec![TokenType::SemiColon]).unwrap();
     }
 
     fn modify_type(&self, node: Node, right_type: Type, op: Option<TokenType>) -> Option<Node> {
