@@ -1058,7 +1058,7 @@ impl Parser {
 
         self.current_fn = self.find_symbol(identifier.clone());
         let body = self.compound_statement();
-        // delete local variables and
+        // delete local variables and parameter symbols
         self.symbols.retain(|x| {
             x.borrow().class != StorageClass::Local && x.borrow().class != StorageClass::Param
         });
