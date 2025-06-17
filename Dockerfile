@@ -1,4 +1,4 @@
-FROM rust:latest
+FROM --platform=linux/amd64 rust:latest
 RUN apt-get update -y && apt-get install -y build-essential
 WORKDIR /usr/src/crust
 COPY . .
