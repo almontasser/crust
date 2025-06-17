@@ -1383,9 +1383,13 @@ impl CodeGen {
         self.assembly
             .text
             .push_str(&format!("\t{}\t {}, {}\n", mov, r, c_register));
+        let shift = match ty {
+            Type::I8 | Type::I16 | Type::I32 | Type::I64 => "sarq",
+            _ => "shrq",
+        };
         self.assembly.text.push_str(&format!(
-            "\tsarq\t {}, {}\n",
-            c_register, REGISTER_NAMES[left]
+            "\t{}\t {}, {}\n",
+            shift, c_register, REGISTER_NAMES[left]
         ));
         self.free_register(right);
         left
