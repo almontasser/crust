@@ -10,12 +10,14 @@ fn main(): u32 {
   let cnt: u32;
 
   buf= "                                                             ";
-  zin = open("input30", 0);
+  zin = open("test30", 0);
   if (zin == -1) {
     return 1;
   }
-  while ((cnt = read(zin, buf, 60)) > 0) {
+  cnt = read(zin, buf, 60);
+  while (cnt > 0) {
     write(1, buf, cnt);
+    cnt = read(zin, buf, 60);
   }
   close(zin);
   return 0;
