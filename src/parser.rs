@@ -1342,7 +1342,7 @@ impl Parser {
             }));
 
             if !first_pass {
-                // TODO: Merge it with the bellow symbol, make single creation of a symbol
+                // TODO: Merge it with the below symbol, make single creation of a symbol
                 self.symbols.push(symbol.clone());
                 // self.add_symbol(
                 //     identifier.clone(),
