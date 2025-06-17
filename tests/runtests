@@ -6,6 +6,8 @@ if [ ! -f ../target/debug/crust ]
 then echo "Need to build the compiler first!"; exit 1
 fi
 
+exit_status=0
+
 for i in test*
 do if [ ! -f "out.$i" ]
    then echo "Can't run test on $i, no output file!"
@@ -15,13 +17,18 @@ do if [ ! -f "out.$i" ]
     #  nasm -f elf64 out.s
      cc -no-pie -z noexecstack -o out out.s
      ./out > trial.$i
-     cmp -s "out.$i" "trial.$i"
-     if [ "$?" -eq "1" ]
-     then echo ": failed"
-       diff -c "out.$i" "trial.$i"
-       echo
-     else echo ": OK"
-     fi
-     rm -f out out.o out.s "trial.$i"
-   fi
+    cmp -s "out.$i" "trial.$i"
+    if [ "$?" -eq "1" ]
+    then
+      echo ": failed"
+      diff -c "out.$i" "trial.$i"
+      echo
+      exit_status=1
+    else
+      echo ": OK"
+    fi
+    rm -f out out.o out.s "trial.$i"
+  fi
 done
+
+exit $exit_status

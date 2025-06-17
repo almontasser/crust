@@ -572,7 +572,6 @@ impl CodeGen {
                 "\tmovq\t{}, {}\n",
                 REGISTER_NAMES[register], identifier
             ));
-            panic!("Unexpected type {:?}", ty);
         } else {
             panic!("Unexpected type {:?}", ty);
         }
