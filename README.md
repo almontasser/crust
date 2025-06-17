@@ -51,6 +51,13 @@ cc -no-pie -z noexecstack -o bin out.s # Use the GNU C compiler to compile and l
 ./runtests.sh
 ```
 
+If you're on macOS or another non-Linux system, you can run the tests in a
+Linux Docker container using the provided `Dockerfile`:
+
+```sh
+./docker_runtests.sh
+```
+
 ## Examples
 
 Some examples of the language
