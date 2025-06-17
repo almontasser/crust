@@ -683,21 +683,22 @@ impl Parser {
         let identifier = self.previous(1);
         match self.find_symbol(identifier.clone()) {
             Some(symbol) => {
-                // TODO: This is hacky, fix it
-                if self.match_token(vec![TokenType::LeftParen]) {
+                if self.check(TokenType::LeftParen) {
                     if symbol.borrow().structure != SymbolType::Function {
                         panic!(
                             "Expected function at line {} column {}",
-                            identifier.line, identifier.column
+                            identifier.line,
+                            identifier.column
                         );
                     }
+                    self.advance();
                     return self.function_call();
                 } else if symbol.borrow().structure != SymbolType::Variable {
-                    panic!(
-                        "Expected variable at line {} column {} got {:?}",
-                        identifier.line,
-                        identifier.column,
-                        symbol.borrow().structure
+                        panic!(
+                            "Expected variable at line {} column {} got {:?}",
+                            identifier.line,
+                            identifier.column,
+                            symbol.borrow().structure
                     );
                 }
 
@@ -1330,30 +1331,28 @@ impl Parser {
                 local_offset += 8;
             }
 
-            let symbol = Rc::new(RefCell::new(Symbol {
-                identifier,
-                structure: SymbolType::Variable,
-                class: StorageClass::Param,
-                ty: Some(ty.clone()),
-                end_label: None,
-                size: None,
-                offset: Some(offset),
-                params: None,
-            }));
-
-            if !first_pass {
-                // TODO: Merge it with the below symbol, make single creation of a symbol
-                self.symbols.push(symbol.clone());
-                // self.add_symbol(
-                //     identifier.clone(),
-                //     SymbolType::Variable,
-                //     StorageClass::Param,
-                //     Some(ty.clone()),
-                //     None,
-                //     Some(offset),
-                //     None,
-                // );
-            }
+            let symbol = if first_pass {
+                Rc::new(RefCell::new(Symbol {
+                    identifier,
+                    structure: SymbolType::Variable,
+                    class: StorageClass::Param,
+                    ty: Some(ty.clone()),
+                    end_label: None,
+                    size: None,
+                    offset: Some(offset),
+                    params: None,
+                }))
+            } else {
+                self.add_symbol(
+                    identifier.clone(),
+                    SymbolType::Variable,
+                    StorageClass::Param,
+                    Some(ty.clone()),
+                    None,
+                    Some(offset),
+                    None,
+                )
+            };
 
             params.push(symbol);
 

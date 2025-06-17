@@ -257,7 +257,8 @@ impl CodeGen {
             } => self.if_stmt(condition, then_branch, else_branch),
             Node::CompoundStmt { statements } => {
                 for statement in statements {
-                    self.generate_node(statement);
+                    let reg = self.generate_node(statement);
+                    self.free_register(reg);
                 }
                 0
             }
@@ -274,18 +275,7 @@ impl CodeGen {
                 stack_size,
                 body,
             ),
-            Node::FnCall {
-                identifier, args, ..
-            } => {
-                // TODO: fix ths hack
-                let r = self.function_call(identifier.clone(), args);
-                if identifier.lexeme.unwrap() == "printint" {
-                    self.free_register(r);
-                    0
-                } else {
-                    r
-                }
-            }
+            Node::FnCall { identifier, args, .. } => self.function_call(identifier.clone(), args),
             Node::ReturnStmt { expr, fn_name } => self.return_stmt(expr, fn_name.borrow().clone()),
             Node::PostIncStmt { left } => self.post_inc_stmt(left),
             Node::PostDecStmt { left } => self.post_dec_stmt(left),
