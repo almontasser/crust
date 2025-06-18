@@ -6,6 +6,9 @@ union Bar {
 
 fn main(): u32 {
   let u: Bar;
-  printint(56);
+  u.a = 256;
+  printint(u.a);
+  printint(u.b);
+  printint(u.c);
   return 0;
 }

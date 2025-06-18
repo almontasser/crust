@@ -5,6 +5,9 @@ struct Foo {
 
 fn main(): u32 {
   let x: Foo;
-  printint(42);
+  x.a = 10;
+  x.b = 20;
+  printint(x.a);
+  printint(x.b);
   return 0;
 }
