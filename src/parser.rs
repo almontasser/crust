@@ -11,6 +11,9 @@ use crate::{
 pub enum SymbolType {
     Function,
     Variable,
+    StructType,
+    UnionType,
+    EnumType,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -127,6 +130,15 @@ impl Parser {
         while !self.is_at_end() {
             if self.check(TokenType::Extern) {
                 self.extern_fn_decl(true);
+            } else if self.check(TokenType::Struct) {
+                let node = self.parse_struct_decl();
+                self.nodes.push(node);
+            } else if self.check(TokenType::Union) {
+                let node = self.parse_union_decl();
+                self.nodes.push(node);
+            } else if self.check(TokenType::Enum) {
+                let node = self.parse_enum_decl();
+                self.nodes.push(node);
             } else if self.match_token(vec![TokenType::Let]) {
                 let node = self.var_decl(false);
                 self.expect(vec![TokenType::SemiColon]).unwrap();
@@ -141,22 +153,227 @@ impl Parser {
         // second pass
         self.current = 0;
         while !self.is_at_end() {
-            // skip global variables since we already parsed it in the first pass
+            // skip global variables and type declarations since we already parsed it in the first pass
             if self.check(TokenType::Extern) {
                 self.extern_fn_decl(false);
                 continue;
+            } else if self.check(TokenType::Struct) || self.check(TokenType::Union) || self.check(TokenType::Enum) {
+                // Skip the declaration as it's already processed.
+                // We need to advance past it. This is a bit naive; a better way would be to store
+                // the end position of the declaration or re-parse it without adding to nodes/symbols.
+                // For now, let's assume they are top-level and followed by ';'.
+                // This will need more robust handling if they can be nested or complex.
+                let mut depth = 0;
+                loop {
+                    if self.check(TokenType::LeftBrace) {
+                        depth += 1;
+                    } else if self.check(TokenType::RightBrace) {
+                        depth -= 1;
+                    }
+                    self.advance();
+                    if depth == 0 && self.check(TokenType::SemiColon) {
+                        self.advance();
+                        break;
+                    }
+                    if self.is_at_end() { break; }
+                }
+                continue;
             } else if self.match_token(vec![TokenType::Let]) {
+                // Also skip global variable declarations
                 while !self.match_token(vec![TokenType::SemiColon]) {
+                    if self.is_at_end() { break; }
                     self.advance();
                 }
                 continue;
             }
 
-            let node = self.fn_decl(false).unwrap();
-            self.nodes.push(node);
+
+            if self.check(TokenType::Fn) {
+                 let node = self.fn_decl(false).unwrap();
+                 self.nodes.push(node);
+            } else if !self.is_at_end() {
+                // If there's anything else, it's unexpected at global scope in second pass
+                // unless it's EOF.
+                if self.peek().token_type != TokenType::Eof {
+                     eprintln!(
+                        "Unexpected token {:?} at global scope during second pass at line {} column {}",
+                        self.peek().token_type,
+                        self.peek().line,
+                        self.peek().start_column
+                    );
+                    // Consume the token to prevent infinite loops on errors
+                    self.advance();
+                }
+            }
         }
 
         &self.nodes
+    }
+
+    fn parse_struct_decl(&mut self) -> Node {
+        self.expect(vec![TokenType::Struct]).unwrap();
+        let identifier = self.expect(vec![TokenType::Identifier]).unwrap();
+        self.expect(vec![TokenType::LeftBrace]).unwrap();
+
+        let mut fields = Vec::new();
+        let mut struct_size = 0;
+
+        while !self.check(TokenType::RightBrace) {
+            let field_name = self.expect(vec![TokenType::Identifier]).unwrap();
+            self.expect(vec![TokenType::Colon]).unwrap();
+            let field_type = self.parse_type();
+            self.expect(vec![TokenType::SemiColon]).unwrap();
+
+            struct_size += field_type.size();
+            fields.push((field_name, field_type.clone()));
+        }
+
+        self.expect(vec![TokenType::RightBrace]).unwrap();
+        self.expect(vec![TokenType::SemiColon]).unwrap();
+
+        let struct_type = Type::Struct {
+            name: identifier.lexeme.clone().unwrap(),
+            fields: fields
+                .iter()
+                .map(|(name, ty)| (name.lexeme.clone().unwrap(), ty.clone()))
+                .collect(),
+            size: struct_size,
+        };
+
+        // TODO: Add to symbol table correctly
+        self.add_symbol(
+            identifier.clone(),
+            SymbolType::StructType, // Placeholder
+            StorageClass::Global,    // Assuming global for now
+            Some(struct_type),
+            None,
+            None,
+            None,
+        );
+
+        Node::StructDecl {
+            identifier,
+            fields,
+        }
+    }
+
+    fn parse_union_decl(&mut self) -> Node {
+        self.expect(vec![TokenType::Union]).unwrap();
+        let identifier = self.expect(vec![TokenType::Identifier]).unwrap();
+        self.expect(vec![TokenType::LeftBrace]).unwrap();
+
+        let mut fields = Vec::new();
+        let mut max_field_size = 0;
+
+        while !self.check(TokenType::RightBrace) {
+            let field_name = self.expect(vec![TokenType::Identifier]).unwrap();
+            self.expect(vec![TokenType::Colon]).unwrap();
+            let field_type = self.parse_type();
+            self.expect(vec![TokenType::SemiColon]).unwrap();
+
+            if field_type.size() > max_field_size {
+                max_field_size = field_type.size();
+            }
+            fields.push((field_name, field_type.clone()));
+        }
+
+        self.expect(vec![TokenType::RightBrace]).unwrap();
+        self.expect(vec![TokenType::SemiColon]).unwrap();
+
+        let union_type = Type::Union {
+            name: identifier.lexeme.clone().unwrap(),
+            fields: fields
+                .iter()
+                .map(|(name, ty)| (name.lexeme.clone().unwrap(), ty.clone()))
+                .collect(),
+            size: max_field_size,
+        };
+
+        // TODO: Add to symbol table correctly
+        self.add_symbol(
+            identifier.clone(),
+            SymbolType::UnionType, // Placeholder
+            StorageClass::Global,   // Assuming global for now
+            Some(union_type),
+            None,
+            None,
+            None,
+        );
+
+        Node::UnionDecl {
+            identifier,
+            fields,
+        }
+    }
+
+    fn parse_enum_decl(&mut self) -> Node {
+        self.expect(vec![TokenType::Enum]).unwrap();
+        let identifier = self.expect(vec![TokenType::Identifier]).unwrap();
+        self.expect(vec![TokenType::LeftBrace]).unwrap();
+
+        let mut variants = Vec::new();
+        let mut current_value: i64 = 0;
+
+        while !self.check(TokenType::RightBrace) {
+            let variant_name = self.expect(vec![TokenType::Identifier]).unwrap();
+            let mut literal_value = None;
+            let assigned_value;
+
+            if self.match_token(vec![TokenType::Assign]) {
+                let value_token = self.expect(vec![TokenType::Integer]).unwrap();
+                let val = match value_token.value {
+                    Some(Literal::Integer(v)) => v as i64,
+                    _ => panic!("Enum variant value must be an integer."),
+                };
+                literal_value = Some(LiteralValue::I64(val)); // Assuming I64 for now
+                assigned_value = val;
+                current_value = val + 1;
+            } else {
+                literal_value = Some(LiteralValue::I64(current_value));
+                assigned_value = current_value;
+                current_value += 1;
+            }
+            variants.push((variant_name, literal_value));
+
+            if !self.check(TokenType::RightBrace) {
+                self.expect(vec![TokenType::Comma]).unwrap();
+            }
+        }
+
+        self.expect(vec![TokenType::RightBrace]).unwrap();
+        self.expect(vec![TokenType::SemiColon]).unwrap();
+
+        let enum_type = Type::Enum {
+            name: identifier.lexeme.clone().unwrap(),
+            variants: variants
+                .iter()
+                .map(|(name, val_opt)| {
+                    let val = match val_opt {
+                        Some(LiteralValue::I64(v)) => *v,
+                        // Defaulting, though logic above ensures Some(LiteralValue::I64)
+                        _ => 0,
+                    };
+                    (name.lexeme.clone().unwrap(), val)
+                })
+                .collect(),
+            base_type: Box::new(Type::I32), // Defaulting to I32 as per requirement
+        };
+
+        // TODO: Add to symbol table correctly
+        self.add_symbol(
+            identifier.clone(),
+            SymbolType::EnumType, // Placeholder
+            StorageClass::Global,  // Assuming global for now
+            Some(enum_type),
+            None,
+            None,
+            None,
+        );
+
+        Node::EnumDecl {
+            identifier,
+            variants,
+        }
     }
 
     fn is_at_end(&self) -> bool {
@@ -231,8 +448,48 @@ impl Parser {
                 TokenType::I32,
                 TokenType::I64,
                 TokenType::Char,
+                TokenType::Identifier, // For struct/union/enum names
             ])
             .unwrap();
+
+        if ty_token.token_type == TokenType::Identifier {
+            let symbol = self.find_symbol(ty_token.clone()).unwrap_or_else(|| {
+                panic!(
+                    "Unknown type identifier: {} at line {} column {}",
+                    ty_token.lexeme.unwrap(),
+                    ty_token.line,
+                    ty_token.start_column
+                )
+            });
+
+            let sym_borrow = symbol.borrow();
+            match sym_borrow.structure {
+                SymbolType::StructType | SymbolType::UnionType | SymbolType::EnumType => {
+                    let mut ty = sym_borrow.ty.as_ref().unwrap().clone();
+                    // Handle pointers to struct/union/enum
+                    for _ in 0..pointers_counter {
+                        ty = ty.pointer_to();
+                    }
+                    // Handle arrays of struct/union/enum
+                    if self.match_token(vec![TokenType::LeftBracket]) {
+                        let size_token = self.expect(vec![TokenType::Integer]).unwrap();
+                        let count = match size_token.value {
+                            Some(Literal::Integer(val)) => val,
+                            _ => panic!("Expected integer for array size"),
+                        };
+                        self.expect(vec![TokenType::RightBracket]).unwrap();
+                        ty = Type::Array { ty: Box::new(ty), count };
+                    }
+                    return ty;
+                }
+                _ => panic!(
+                    "Identifier {} is not a type (struct, union, or enum) at line {} column {}",
+                    ty_token.lexeme.unwrap(),
+                    ty_token.line,
+                    ty_token.start_column
+                ),
+            }
+        }
 
         let (is_array, size) = if self.match_token(vec![TokenType::LeftBracket]) {
             let size_token = self.expect(vec![TokenType::Integer]).unwrap();
@@ -688,12 +945,95 @@ impl Parser {
             node = self.primary();
         }
 
-        node
+        node = self.primary();
     }
 
-    fn postfix(&mut self) -> Node {
-        let identifier = self.previous(1);
-        match self.find_symbol(identifier.clone()) {
+    // NEW: Loop for postfix operations like '.', '()', '[]'
+    // This is a simplified loop focusing on '.' for now.
+    // Full integration requires refactoring how (), [], ++, --, and assignments are handled.
+    loop {
+        if self.match_token(vec![TokenType::Dot]) {
+            node = self.parse_field_access(node);
+        }
+        // TODO: Integrate general '()', '[]', '++', '--' and assignment handling here
+        // This will require refactoring the existing postfix() and assignment logic.
+        // else if self.match_token(vec![TokenType::LeftParen]) { ... }
+        // else if self.match_token(vec![TokenType::LeftBracket]) { ... }
+        else {
+            break;
+        }
+    }
+    node
+}
+
+fn parse_field_access(&mut self, object: Node) -> Node {
+    let field_token = self.expect(vec![TokenType::Identifier]).unwrap_or_else(|e| {
+        panic!("Expected field name after '.' at line {} column {}: {}", self.previous(1).line, self.previous(1).start_column, e);
+    });
+
+    let object_ty = object.ty().unwrap_or_else(|| {
+        panic!("Cannot access field on an object with no type at line {} column {}", field_token.line, field_token.start_column);
+    });
+
+    match object_ty.clone() { // Clone object_ty to allow moving object into Node::StructFieldAccess
+        Type::Struct { name: struct_name, fields, .. } => {
+            if let Some((_name, field_type)) = fields.iter().find(|(fname, _)| fname == field_token.lexeme.as_ref().unwrap()) {
+                Node::StructFieldAccess {
+                    object: Box::new(object),
+                    field: field_token,
+                    ty: field_type.clone(),
+                }
+            } else {
+                panic!("Struct '{}' has no field named '{}' at line {} column {}", struct_name, field_token.lexeme.as_ref().unwrap(), field_token.line, field_token.start_column);
+            }
+        }
+        Type::Union { name: union_name, fields, .. } => {
+             if let Some((_name, field_type)) = fields.iter().find(|(fname, _)| fname == field_token.lexeme.as_ref().unwrap()) {
+                Node::StructFieldAccess { // Reusing StructFieldAccess for unions
+                    object: Box::new(object),
+                    field: field_token,
+                    ty: field_type.clone(),
+                }
+            } else {
+                panic!("Union '{}' has no field named '{}' at line {} column {}", union_name, field_token.lexeme.as_ref().unwrap(), field_token.line, field_token.start_column);
+            }
+        }
+        Type::Pointer { ty, .. } => {
+            match *ty {
+                Type::Struct { name: struct_name, fields, .. } => {
+                    if let Some((_name, field_type)) = fields.iter().find(|(fname, _)| fname == field_token.lexeme.as_ref().unwrap()) {
+                        // The 'object' is the pointer itself. Codegen needs to handle dereferencing.
+                        Node::StructFieldAccess {
+                            object: Box::new(object),
+                            field: field_token,
+                            ty: field_type.clone(),
+                        }
+                    } else {
+                        panic!("Struct '{}' (via pointer) has no field named '{}' at line {} column {}", struct_name, field_token.lexeme.as_ref().unwrap(), field_token.line, field_token.start_column);
+                    }
+                }
+                Type::Union { name: union_name, fields, .. } => {
+                    if let Some((_name, field_type)) = fields.iter().find(|(fname, _)| fname == field_token.lexeme.as_ref().unwrap()) {
+                        Node::StructFieldAccess {
+                            object: Box::new(object),
+                            field: field_token,
+                            ty: field_type.clone(),
+                        }
+                    } else {
+                        panic!("Union '{}' (via pointer) has no field named '{}' at line {} column {}", union_name, field_token.lexeme.as_ref().unwrap(), field_token.line, field_token.start_column);
+                    }
+                }
+                _ => panic!("Field access through pointer to non-struct/union type {:?} is not allowed with '.' operator at line {} column {}", ty, field_token.line, field_token.start_column),
+            }
+        }
+        _ => panic!("Cannot access field on type {:?} at line {} column {}", object_ty, field_token.line, field_token.start_column),
+    }
+}
+
+
+fn postfix(&mut self) -> Node {
+    let identifier = self.previous(1);
+    match self.find_symbol(identifier.clone()) {
             Some(symbol) => {
                 if self.check(TokenType::LeftParen) {
                     if symbol.borrow().structure != SymbolType::Function {
@@ -873,17 +1213,18 @@ impl Parser {
         offset: Option<isize>,
         params: Option<Vec<Rc<RefCell<Symbol>>>>,
     ) -> Rc<RefCell<Symbol>> {
-        let symbol = self.find_symbol(identifier.clone());
-        if symbol.is_some() {
-            let ty = if symbol.unwrap().borrow().structure == SymbolType::Variable {
-                "Variable"
-            } else {
-                "Function"
+            let existing_symbol = self.find_symbol_in_current_scope(identifier.clone());
+            if existing_symbol.is_some() {
+                let sym_type_str = match existing_symbol.unwrap().borrow().structure {
+                    SymbolType::Variable => "Variable",
+                    SymbolType::Function => "Function",
+                    SymbolType::StructType => "Struct",
+                    SymbolType::UnionType => "Union",
+                    SymbolType::EnumType => "Enum",
             };
-
             eprintln!(
-                "Local {} \"{}\" already declared at line {} column {}",
-                ty,
+                    "{} \"{}\" already declared in this scope at line {} column {}",
+                    sym_type_str,
                 identifier.lexeme.clone().unwrap(),
                 identifier.line,
                 identifier.start_column
@@ -909,18 +1250,97 @@ impl Parser {
 
     fn find_symbol(&self, identifier: Token) -> Option<Rc<RefCell<Symbol>>> {
         let mut symbol: Option<Rc<RefCell<Symbol>>> = None;
-        for it in &self.symbols {
+        // Search from the end of the symbol table to find the nearest scope
+        for it in self.symbols.iter().rev() {
             if it.borrow().identifier.lexeme.clone().unwrap() == identifier.lexeme.clone().unwrap()
             {
                 symbol = Some(it.clone());
-                if it.borrow().class == StorageClass::Local {
+                // If it's a global or a type definition, it's fine.
+                // If it's local/param, it must be in the current function's scope.
+                // This logic might need refinement for nested scopes if they are introduced.
+                if it.borrow().class == StorageClass::Local || it.borrow().class == StorageClass::Param {
+                    // Check if this local/param symbol belongs to the current function
+                    // This is a simplification; proper lexical scoping would require more robust handling
+                    if self.current_fn.is_some() {
+                        let current_fn_name = self.current_fn.as_ref().unwrap().borrow().identifier.lexeme.clone();
+                        // This check is imperfect, assumes locals/params are added after function symbol
+                        // and cleared on function exit.
+                        // A more robust way would be to link symbols to their scope (e.g. function name or ID).
+                        let mut found_in_current_fn_scope = false;
+                        if let Some(params) = &it.borrow().params { // Check if it's a function symbol itself
+                            if it.borrow().identifier.lexeme == current_fn_name {
+                                found_in_current_fn_scope = true;
+                            }
+                        } else if it.borrow().class == StorageClass::Param {
+                            // Check if the symbol is a parameter of the current_fn
+                            if let Some(current_fn_symbol) = &self.current_fn {
+                                if let Some(fn_params) = &current_fn_symbol.borrow().params {
+                                    if fn_params.iter().any(|p| p.borrow().identifier.lexeme == it.borrow().identifier.lexeme) {
+                                        found_in_current_fn_scope = true;
+                                    }
+                                }
+                            }
+                        } else if it.borrow().class == StorageClass::Local {
+                             // Assume local is part of current function if current_fn is set.
+                             // This needs better scope management for correctness with nested blocks.
+                            found_in_current_fn_scope = true;
+                        }
+
+
+                        if found_in_current_fn_scope {
+                            break; // Found the most relevant local/param symbol
+                        } else {
+                            symbol = None; // This local/param is not in the current function's direct scope
+                            continue; // Keep searching for a global or another declaration
+                        }
+                    } else {
+                        // No current function, so a local/param symbol here would be out of place
+                        // unless it's a global scope variable being shadowed, which find_symbol_in_current_scope should prevent.
+                        // For simplicity, we assume global scope if no current_fn.
+                         if it.borrow().class == StorageClass::Global {
+                            break;
+                        } else {
+                            symbol = None;
+                            continue;
+                        }
+                    }
+                } else { // Global, StructType, UnionType, EnumType
                     break;
                 }
             }
         }
-
         symbol
     }
+
+    // Helper to check for symbols only in the current (innermost) scope.
+    // For globals, this is the global scope. For locals, it's within the current function.
+    // This is a simplified check. Proper scoping would require managing a stack of symbol tables.
+    fn find_symbol_in_current_scope(&self, identifier: Token) -> Option<Rc<RefCell<Symbol>>> {
+        for it in self.symbols.iter().rev() {
+            if it.borrow().identifier.lexeme.clone().unwrap() == identifier.lexeme.clone().unwrap() {
+                // If we are in a function, current scope is locals/params of this function or globals.
+                if self.current_fn.is_some() {
+                    if it.borrow().class == StorageClass::Local || it.borrow().class == StorageClass::Param {
+                        // This is a rough check. Assumes params/locals are associated with current_fn.
+                        // A more robust check would involve comparing parent scope IDs or similar.
+                        return Some(it.clone());
+                    } else if it.borrow().class == StorageClass::Global {
+                        // Globals are accessible, but we are checking for re-declarations in *current* scope.
+                        // So if 'it' is global, it's not a re-declaration in the *local* current scope.
+                        // However, if we are AT global scope (current_fn is None), then finding a global IS a re-declaration.
+                        continue; // Keep searching for a local/param with the same name.
+                    } else { // StructType, UnionType, EnumType are considered global for now
+                        return Some(it.clone());
+                    }
+                } else {
+                    // We are in global scope. Any match is in the current scope.
+                    return Some(it.clone());
+                }
+            }
+        }
+        None
+    }
+
 
     fn while_statement(&mut self) -> Node {
         self.expect(vec![TokenType::LeftParen]).unwrap();
