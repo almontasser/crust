@@ -356,8 +356,7 @@ impl Parser {
                 {
                     panic!(
                         "Expected comparison operator at line {} column {}",
-                        operator.line,
-                        operator.start_column
+                        operator.line, operator.start_column
                     );
                 }
             }
@@ -498,8 +497,7 @@ impl Parser {
             if temp_left.is_none() && temp_right.is_none() {
                 panic!(
                     "Incompatible types at line {} column {}",
-                    operator.line,
-                    operator.start_column
+                    operator.line, operator.start_column
                 );
             }
 
@@ -538,8 +536,7 @@ impl Parser {
             if temp_left.is_none() && temp_right.is_none() {
                 panic!(
                     "Incompatible types at line {} column {}",
-                    operator.line,
-                    operator.start_column
+                    operator.line, operator.start_column
                 );
             }
 
@@ -702,19 +699,18 @@ impl Parser {
                     if symbol.borrow().structure != SymbolType::Function {
                         panic!(
                             "Expected function at line {} column {}",
-                            identifier.line,
-                            identifier.start_column
+                            identifier.line, identifier.start_column
                         );
                     }
                     self.advance();
                     return self.function_call();
                 } else if symbol.borrow().structure != SymbolType::Variable {
-                        panic!(
-                            "Expected variable at line {} column {} got {:?}",
-                            identifier.line,
-                            identifier.start_column,
-                            symbol.borrow().structure
-                        );
+                    panic!(
+                        "Expected variable at line {} column {} got {:?}",
+                        identifier.line,
+                        identifier.start_column,
+                        symbol.borrow().structure
+                    );
                 }
 
                 let left = if self.match_token(vec![TokenType::LeftBracket]) {
@@ -754,12 +750,15 @@ impl Parser {
                     left
                 }
             }
-            None => panic!(
-                "Variable {} not declared at line {} column {}",
-                identifier.lexeme.clone().unwrap(),
-                identifier.line,
-                identifier.start_column
-            ),
+            None => {
+                eprintln!(
+                    "Undefined identifier {} at line {} column {}",
+                    identifier.lexeme.clone().unwrap(),
+                    identifier.line,
+                    identifier.start_column
+                );
+                std::process::exit(1);
+            }
         }
     }
 
@@ -806,12 +805,11 @@ impl Parser {
         }
 
         let token = self.peek();
-        panic!(
+        eprintln!(
             "Unexpected token {:?} at line {} column {}",
-            token.token_type,
-            token.line,
-            token.start_column
+            token.token_type, token.line, token.start_column
         );
+        std::process::exit(1);
     }
 
     fn match_token(&mut self, vec: Vec<TokenType>) -> bool {
@@ -883,13 +881,14 @@ impl Parser {
                 "Function"
             };
 
-            panic!(
-                "{} {} already declared at line {} column {}",
+            eprintln!(
+                "Local {} \"{}\" already declared at line {} column {}",
                 ty,
                 identifier.lexeme.clone().unwrap(),
                 identifier.line,
                 identifier.start_column
             );
+            std::process::exit(1);
         }
 
         let symbol = Rc::new(RefCell::new(Symbol {
@@ -937,8 +936,7 @@ impl Parser {
                 {
                     panic!(
                         "Expected comparison operator at line {} column {}",
-                        operator.line,
-                        operator.start_column
+                        operator.line, operator.start_column
                     );
                 }
             }
@@ -990,8 +988,7 @@ impl Parser {
                     {
                         panic!(
                             "Expected comparison operator at line {} column {}",
-                            operator.line,
-                            operator.start_column
+                            operator.line, operator.start_column
                         );
                     }
                 }
@@ -1217,8 +1214,7 @@ impl Parser {
         if symbol.borrow().structure != SymbolType::Function {
             panic!(
                 "Expected function at line {} column {}",
-                identifier.line,
-                identifier.start_column
+                identifier.line, identifier.start_column
             );
         }
 
@@ -1253,11 +1249,14 @@ impl Parser {
         let ty = fn_sym.borrow().ty.as_ref().unwrap().clone();
         expr = match self.modify_type(expr, ty, None) {
             Some(node) => node,
-            None => panic!(
-                "Incompatible types at line {} column {}",
-                self.previous(1).line,
-                self.previous(1).start_column
-            ),
+            None => {
+                eprintln!(
+                    "Incompatible type to return at line {} column {}",
+                    self.previous(1).line,
+                    self.previous(1).start_column
+                );
+                std::process::exit(1);
+            }
         };
 
         Node::ReturnStmt {

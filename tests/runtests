@@ -2,33 +2,71 @@
 # Run each test and compare
 # against known good output
 
-if [ ! -f ../target/debug/crust ]
-then echo "Need to build the compiler first!"; exit 1
+if [ ! -f ../target/debug/crust ]; then
+  echo "Need to build the compiler first!"
+  (
+    cd ..
+    cargo build
+  )
 fi
 
 exit_status=0
 
-for i in test*
-do if [ ! -f "out.$i" ]
-   then echo "Can't run test on $i, no output file!"
-   else
-     echo -n $i
-     ../target/debug/crust $i
-    #  nasm -f elf64 out.s
-     cc -no-pie -z noexecstack -o out out.s
-     ./out > trial.$i
-    cmp -s "out.$i" "trial.$i"
-    if [ "$?" -eq "1" ]
-    then
-      echo ": failed"
-      diff -c "out.$i" "trial.$i"
-      echo
-      exit_status=1
+for i in test*; do
+  if [ ! -f "out.$i" -a ! -f "err.$i" ]; then
+    echo "Can't run test on $i, no output file!"
+    # Output file: compile the source, run it and
+    # capture the output, and compare it against
+    # the known-good output
+  else
+    if [ -f "out.$i" ]; then
+      # Print the test name, compile it
+      # with our compiler
+      echo -n $i
+      ../target/debug/crust $i
+
+      # Assemble the output, run it
+      # and get the output in trial.$i
+      cc -no-pie -z noexecstack -o out out.s
+      ./out >trial.$i
+
+      # Compare this agains the correct output
+      cmp -s "out.$i" "trial.$i"
+
+      # If different, announce failure
+      # and print out the difference
+      if [ "$?" -eq "1" ]; then
+        echo ": failed"
+        diff -c "out.$i" "trial.$i"
+        echo
+
+        exit_status=1
+
+      # No failure, so announce success
+      else
+        echo ": OK"
+      fi
+
+    # Error file: compile the source and
+    # capture the error messages. Compare
+    # against the known-bad output. Same
+    # mechanism as before
     else
-      echo ": OK"
+      if [ -f "err.$i" ]; then
+        echo -n $i
+        ../target/debug/crust $i 2>"trial.$i"
+        cmp -s "err.$i" "trial.$i"
+        if [ "$?" -eq "1" ]; then
+          echo ": failed"
+          diff -c "err.$i" "trial.$i"
+          echo
+        else
+          echo ": OK"
+        fi
+      fi
     fi
-    rm -f out out.o out.s "trial.$i"
   fi
+  rm -f out out.o out.s "trial.$i"
 done
 
 exit $exit_status
