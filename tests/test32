@@ -1,0 +1,3 @@
+fn main(): u32 {
+  pizza cow llama sausage;
+}

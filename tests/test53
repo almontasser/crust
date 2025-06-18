@@ -1,0 +1,7 @@
+extern fn printf(fmt: *char): i32;
+
+fn main(): u32
+{
+  printf("Hello world, %d\n", 23);
+  return 0;
+}

@@ -1,0 +1,10 @@
+extern fn printf(fmt: *char): i32;
+
+fn main(): u32
+{
+  let i: i32;
+  for (i = 0; i < 20; i++) {
+    printf("Hello world, %d\n", i);
+  }
+  return 0;
+}

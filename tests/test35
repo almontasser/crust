@@ -1,0 +1,4 @@
+fn fred(a: i32, b: i32) {
+  let a: i32;
+  return a;
+}

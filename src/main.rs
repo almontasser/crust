@@ -207,6 +207,14 @@ fn main() {
     };
 
     let mut lexer = lexer::Lexer::new(source);
+
+    if DEBUG {
+        println!("Tokens:");
+        for token in lexer.scan_tokens().clone() {
+            println!("{:?}", token);
+        }
+    }
+
     let tokens = lexer.scan_tokens();
     let mut parser = parser::Parser::new(tokens.clone());
     let nodes = parser.parse();
