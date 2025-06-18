@@ -1,0 +1,39 @@
+// Struct Declaration
+struct Point { x: i32; y: i32; }
+struct Data { val: i32; }
+
+// Global struct variable
+let global_pt: Point;
+
+// Nested Struct Declaration
+struct Inner { b: i32; }
+struct Outer { a: i32; n: Inner; }
+
+fn main() {
+    // Local struct variable declaration and field access
+    let local_pt: Point;
+    global_pt.x = 10;
+    global_pt.y = 20;
+    local_pt.x = 30;
+    local_pt.y = 40;
+    printint(global_pt.x);
+    printint(global_pt.y);
+    printint(local_pt.x);
+    printint(local_pt.y);
+
+    // Pointers to Structs
+    let d: Data;
+    let p: *Data;
+    p = &d;
+    // Assuming p.val is parsed as (*p).val or codegen handles it
+    p.val = 100;
+    printint(d.val);
+    printint(p.val);
+
+    // Nested Structs
+    let o: Outer;
+    o.a = 1;
+    o.n.b = 2;
+    printint(o.a);
+    printint(o.n.b);
+}

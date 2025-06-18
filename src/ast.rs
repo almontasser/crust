@@ -95,6 +95,23 @@ pub enum Node {
     ToBool {
         expr: Box<Node>,
     },
+    StructDecl {
+        identifier: Token,
+        fields: Vec<(Token, Type)>,
+    },
+    UnionDecl {
+        identifier: Token,
+        fields: Vec<(Token, Type)>,
+    },
+    EnumDecl {
+        identifier: Token,
+        variants: Vec<(Token, Option<LiteralValue>)>,
+    },
+    StructFieldAccess {
+        object: Box<Node>,
+        field: Token,
+        ty: Type,
+    },
 }
 
 impl Node {
@@ -119,6 +136,10 @@ impl Node {
             Node::PreIncStmt { right } => right.ty(),
             Node::PreDecStmt { right } => right.ty(),
             Node::ToBool { .. } => Some(Type::U8),
+            Node::StructDecl { .. } => None,
+            Node::UnionDecl { .. } => None,
+            Node::EnumDecl { .. } => None,
+            Node::StructFieldAccess { ty, .. } => Some(ty.clone()),
         }
     }
 }

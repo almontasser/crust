@@ -130,20 +130,18 @@ impl CodeGen {
                         self.negate(right_node)
                     }
                     TokenType::Ampersand => {
-                        // get identifier
-                        let symbol = match &*right {
-                            Node::LiteralExpr {
-                                value: LiteralValue::Identifier(s),
-                                ..
-                            } => s,
-                            _ => panic!("Unexpected token {:?}", right),
-                        };
-
-                        self.address_of(symbol.borrow().clone())
+                        // If & is applied to an expression, we want the address of that expression.
+                        // generate_node_address is designed for this.
+                        // It can handle identifiers, struct field accesses, and dereferences (*ptr).
+                        self.generate_node_address(*right)
                     }
                     TokenType::Mul => {
-                        let right_node = self.generate_node(*right.clone());
-                        self.dereference(right_node, right.ty().unwrap())
+                        // This is dereferencing a pointer's value, e.g. *p
+                        // right_node will hold the address from evaluating p
+                        let right_node_val_reg = self.generate_node(*right.clone());
+                        // ty_ptr is the type of p (e.g. *i32)
+                        let ty_ptr = right.ty().unwrap_or_else(|| panic!("Dereferenced expression has no type"));
+                        self.dereference_pointer_value(right_node_val_reg, ty_ptr)
                     }
                     TokenType::Invert => {
                         let right_node = self.generate_node(*right.clone());
@@ -217,31 +215,53 @@ impl CodeGen {
                         value: LiteralValue::Identifier(s),
                         ..
                     } => {
-                        let register = self.generate_node(*expr.clone());
-                        self.store(
-                            register,
+                        let value_reg = self.generate_node(*expr.clone());
+                        self.store( // store handles symbol storage (global/local variable)
+                            value_reg,
                             s.borrow().clone(),
                             s.borrow().ty.as_ref().unwrap().to_owned(),
                         );
                         self.assignment_depth -= 1;
-                        register
+                        value_reg // Assignment evaluates to the stored value
                     }
-                    Node::UnaryExpr {
-                        operator,
-                        right,
-                        ty,
-                    } => match operator.token_type {
-                        TokenType::Mul => {
-                            let right_node = self.generate_node(*right.clone());
-                            let expr_node = self.generate_node(*expr.clone());
-                            self.store_dereference(expr_node, right_node, ty);
-                            self.free_register(expr_node);
-                            self.assignment_depth -= 1;
-                            right_node
-                        }
-                        _ => panic!("Unexpected token {:?}", left),
-                    },
-                    _ => panic!("Unexpected token {:?}", left),
+                    Node::UnaryExpr { operator, right, ty } if operator.token_type == TokenType::Mul => {
+                        // Assignment to *address, e.g. *p = val
+                        // `right` (Node) is `p`. `ty` (Type) is the type `*p` points to (e.g., i32 if p is *i32).
+                        // `expr` (Node) is `val`.
+                        let address_reg = self.generate_node(*right.clone()); // Evaluate `p` to get its value (the address)
+                        let value_reg = self.generate_node(*expr.clone());   // Evaluate `val`
+                        // ty is the type of the data at the address (e.g. i32), used by store_memory
+                        self.store_memory(value_reg, address_reg, ty);
+                        self.free_register(address_reg); // Address register can be freed after store
+                        self.assignment_depth -= 1;
+                        value_reg // Assignment evaluates to the stored value
+                    }
+                    Node::StructFieldAccess { object, field, ty } => {
+                        // Assignment to struct field, e.g. mystruct.myfield = val
+                        // `object` (Node) is `mystruct`. `field` (Token) is `myfield`.
+                        // `ty` (Type) is the type of the field `myfield`.
+                        // `expr` (Node) is `val`.
+
+                        // 1. Get address of the field: &mystruct.myfield
+                        let field_node_for_addr = Node::StructFieldAccess {
+                             object: object.clone(),
+                             field: field.clone(),
+                             ty: ty.clone()
+                        };
+                        let field_addr_reg = self.generate_node_address(field_node_for_addr);
+
+                        // 2. Evaluate the RHS expression (val)
+                        let value_reg = self.generate_node(*expr.clone());
+
+                        // 3. Store value_reg into memory at field_addr_reg.
+                        // The type for store_memory is the field's type `ty`.
+                        self.store_memory(value_reg, field_addr_reg, ty.clone());
+
+                        self.free_register(field_addr_reg);
+                        self.assignment_depth -= 1;
+                        value_reg // Assignment evaluates to the stored value
+                    }
+                    _ => panic!("Unexpected LHS token for assignment {:?}", left),
                 };
 
                 if self.assignment_depth == 0 {
@@ -282,6 +302,103 @@ impl CodeGen {
             Node::PreIncStmt { right } => self.pre_inc_stmt(right),
             Node::PreDecStmt { right } => self.pre_dec_stmt(right),
             Node::ToBool { expr } => self.expr_to_bool(expr),
+            Node::StructDecl { .. } | Node::UnionDecl { .. } | Node::EnumDecl { .. } => {
+                // These are type declarations, no direct code generation needed at declaration site.
+                0
+            }
+            // Placeholder for StructFieldAccess
+            Node::StructFieldAccess { object, field, ty } => {
+                // This handles R-value access (loading the field's value).
+                // 1. Get the base address of the struct/union instance.
+                let base_addr_reg = self.generate_node_address(*object.clone());
+
+                // 2. Calculate the field's offset from the base address.
+                let object_node_ty = (*object).ty().unwrap();
+                let field_offset = self.calculate_field_offset(object_node_ty.clone(), &field.lexeme.as_ref().unwrap());
+
+                // 3. Add the offset to the base address. base_addr_reg now holds the field's address.
+                self.assembly.text.push_str(&format!(
+                    "\taddq\t${}, {}\n",
+                    field_offset, REGISTER_NAMES[base_addr_reg]
+                ));
+
+                // 4. Load the value from the field's address into a register.
+                // The type 'ty' is the type of the field itself.
+                self.dereference_memory(base_addr_reg, ty.clone()) // Returns register with the value
+            }
+        }
+    }
+
+    // Generates code that results in a register holding the memory address of the node.
+    fn generate_node_address(&mut self, node: Node) -> usize {
+        match node {
+            Node::LiteralExpr { value, ty: _ } => match value {
+                LiteralValue::Identifier(s_rc) => {
+                    let symbol_ref = s_rc.borrow();
+                    match symbol_ref.class {
+                        StorageClass::Local | StorageClass::Param => {
+                            let r = self.allocate_register();
+                            self.assembly.text.push_str(&format!(
+                                "\tleaq\t{}(%rbp), {}\n",
+                                symbol_ref.offset.unwrap(), REGISTER_NAMES[r]
+                            ));
+                            r
+                        }
+                        StorageClass::Global => {
+                            let r = self.allocate_register();
+                            self.assembly.text.push_str(&format!(
+                                "\tleaq\t{}(%rip), {}\n",
+                                symbol_ref.identifier.lexeme.as_ref().unwrap(), REGISTER_NAMES[r]
+                            ));
+                            r
+                        }
+                    }
+                }
+                _ => panic!("Cannot get address of non-identifier literal: {:?}", value),
+            },
+            Node::UnaryExpr { operator, right, ty: _ } if operator.token_type == TokenType::Mul => {
+                // The "address" of *ptr is the value of ptr.
+                self.generate_node(*right) // generate_node evaluates the expression, giving value of ptr
+            }
+            Node::StructFieldAccess { object, field, ty: _field_ty } => {
+                let object_base_address_reg = self.generate_node_address(*object.clone());
+                let object_ty = (*object).ty().unwrap();
+
+                let field_lexeme = field.lexeme.as_ref().unwrap_or_else(|| panic!("Field token has no lexeme"));
+                let field_offset = self.calculate_field_offset(object_ty, field_lexeme);
+
+                self.assembly.text.push_str(&format!(
+                    "\taddq\t${}, {}\n",
+                    field_offset, REGISTER_NAMES[object_base_address_reg]
+                ));
+                object_base_address_reg
+            }
+            _ => panic!("Cannot take address of node type via generate_node_address: {:?}", node),
+        }
+    }
+
+    fn calculate_field_offset(&self, current_type: Type, field_name: &str) -> usize {
+        match current_type {
+            Type::Struct { name, fields, .. } => {
+                let mut current_offset = 0;
+                for (f_name, f_type) in fields {
+                    if f_name == field_name {
+                        return current_offset;
+                    }
+                    current_offset += f_type.size();
+                }
+                panic!("Field '{}' not found in struct '{}'", field_name, name);
+            }
+            Type::Union { name, fields, .. } => {
+                if fields.iter().any(|(fname, _)| fname == field_name) {
+                    return 0;
+                }
+                panic!("Field '{}' not found in union '{}'", field_name, name);
+            }
+            Type::Pointer { ty, .. } => {
+                self.calculate_field_offset(*ty, field_name)
+            }
+            _ => panic!("Cannot calculate field offset for non-struct/union/pointer type {:?}", current_type),
         }
     }
 
@@ -589,11 +706,15 @@ impl CodeGen {
             2 => "\t.short\t0\n",
             4 => "\t.long\t0\n",
             8 => "\t.quad\t0\n",
-            _ => panic!("Unexpected size {}", type_size),
+            1 => "\t.byte\t0\n".to_string(),
+            2 => "\t.short\t0\n".to_string(),
+            4 => "\t.long\t0\n".to_string(),
+            8 => "\t.quad\t0\n".to_string(),
+            _ => format!("\t.space\t{}\n", type_size), // Use .space for other sizes
         };
 
         for _ in 0..count {
-            self.assembly.data.push_str(size_str);
+            self.assembly.data.push_str(&size_str);
         }
     }
 
@@ -948,67 +1069,101 @@ impl CodeGen {
         0
     }
 
-    fn address_of(&mut self, symbol: Symbol) -> usize {
-        let r = self.allocate_register();
+    // address_of is effectively replaced by generate_node_address for most cases.
+    // If direct symbol address is needed internally, new specific functions can be made.
+    // Keeping this commented out for now to ensure it's not called unexpectedly.
+    // fn address_of(&mut self, symbol: Symbol) -> usize {
+    //     let r = self.allocate_register();
+    //     match symbol.class {
+    //         StorageClass::Global => {
+    //             self.assembly.text.push_str(&format!(
+    //                 "\tleaq\t{}(%rip), {}\n",
+    //                 symbol.identifier.lexeme.unwrap(),
+    //                 REGISTER_NAMES[r]
+    //             ));
+    //         }
+    //         StorageClass::Local | StorageClass::Param => {
+    //             let offset = symbol.offset.unwrap();
+    //             self.assembly.text.push_str(&format!(
+    //                 "\tleaq\t{}(%rbp), {}\n",
+    //                 offset, REGISTER_NAMES[r]
+    //             ));
+    //         }
+    //     }
+    //     r
+    // }
 
-        match symbol.class {
-            StorageClass::Global => {
-                self.assembly.text.push_str(&format!(
-                    "\tleaq\t{}(%rip), {}\n",
-                    symbol.identifier.lexeme.unwrap(),
-                    REGISTER_NAMES[r]
-                ));
-            }
-            StorageClass::Local | StorageClass::Param => {
-                let offset = symbol.offset.unwrap();
-                self.assembly.text.push_str(&format!(
-                    "\tleaq\t{}(%rbp), {}\n",
-                    offset, REGISTER_NAMES[r]
-                ));
-            }
-        }
+    // Renamed: dereference_pointer_value. Takes a register holding a POINTER.
+    // Dereferences it and loads the value from pointed-to memory into the SAME register.
+    // 'ty_ptr' is the type of the pointer itself (e.g., Pointer to U8).
+    fn dereference_pointer_value(&mut self, register_with_pointer: usize, ty_ptr: Type) -> usize {
+        let pointed_to_type = ty_ptr.value_at(); // Get the type the pointer points to.
+        let size = pointed_to_type.size();
 
-        r
-    }
-
-    fn dereference(&mut self, register: usize, ty: Type) -> usize {
-        let ty = match ty {
-            Type::Array { ty, .. } => ty.pointer_to(),
-            _ => ty,
-        };
-        match ty {
-            Type::Pointer { ty, count } => {
-                if count > 1 {
-                    self.assembly.text.push_str(&format!(
-                        "\tmovq\t({}), {}\n",
-                        REGISTER_NAMES[register], REGISTER_NAMES[register]
+        match size {
+            1 => self.assembly.text.push_str(&format!(
+                "\tmovzbq\t({}), {}\n",
+                REGISTER_NAMES[register_with_pointer], REGISTER_NAMES[register_with_pointer]
+            )),
+            2 => self.assembly.text.push_str(&format!(
+                "\tmovzwq\t({}), {}\n", // movzwq for word to quad
+                REGISTER_NAMES[register_with_pointer], REGISTER_NAMES[register_with_pointer]
+            )),
+            4 => {
+                // For I32, sign-extend. For U32, zero-extend.
+                if pointed_to_type.is_int() && format!("{:?}", pointed_to_type).starts_with('I') {
+                     self.assembly.text.push_str(&format!(
+                        "\tmovslq\t({}), {}\n", // sign-extend long to quad
+                        REGISTER_NAMES[register_with_pointer], REGISTER_NAMES[register_with_pointer]
                     ));
-                } else {
-                    match *ty {
-                        Type::U8 | Type::Char => self.assembly.text.push_str(&format!(
-                            "\tmovzbq\t({}), {}\n",
-                            REGISTER_NAMES[register], REGISTER_NAMES[register]
-                        )),
-                        Type::U16 => self.assembly.text.push_str(&format!(
-                            "\tmovzx\t({}), {}\n",
-                            REGISTER_NAMES[register], REGISTER_NAMES[register]
-                        )),
-                        Type::U32 => self.assembly.text.push_str(&format!(
-                            "\tmovq\t({}), {}\n",
-                            REGISTER_NAMES[register], REGISTER_NAMES[register]
-                        )),
-                        Type::U64 => self.assembly.text.push_str(&format!(
-                            "\tmovq\t({}), {}\n",
-                            REGISTER_NAMES[register], REGISTER_NAMES[register]
-                        )),
-                        _ => panic!("Unexpected type {:?}", ty),
-                    }
+                } else { // U32 or Enum (treated as unsigned for load)
+                     self.assembly.text.push_str(&format!(
+                        "\tmovl\t({}), {}\n", // movl from memory to 32-bit part of reg zero-extends to 64-bit
+                        REGISTER_NAMES[register_with_pointer], DWORD_REGISTER_NAMES[register_with_pointer]
+                    ));
                 }
             }
-            _ => panic!("Unexpected type {:?}", ty),
+            8 => self.assembly.text.push_str(&format!(
+                "\tmovq\t({}), {}\n",
+                REGISTER_NAMES[register_with_pointer], REGISTER_NAMES[register_with_pointer]
+            )),
+            _ => panic!("Cannot dereference pointer to type {:?} with size {} from memory into register", pointed_to_type, size)
         }
+        register_with_pointer
+    }
 
-        register
+    // New: dereference_memory. Loads data of 'ty_data' from memory address (in address_reg) into address_reg.
+    fn dereference_memory(&mut self, address_reg: usize, ty_data: Type) -> usize {
+        let size = ty_data.size();
+        match size {
+            1 => self.assembly.text.push_str(&format!(
+                "\tmovzbq\t({}), {}\n",
+                REGISTER_NAMES[address_reg], REGISTER_NAMES[address_reg]
+            )),
+            2 => self.assembly.text.push_str(&format!(
+                "\tmovzwq\t({}), {}\n",
+                REGISTER_NAMES[address_reg], REGISTER_NAMES[address_reg]
+            )),
+            4 => {
+                if ty_data.is_int() && format!("{:?}", ty_data).starts_with('I') {
+                     self.assembly.text.push_str(&format!(
+                        "\tmovslq\t({}), {}\n",
+                        REGISTER_NAMES[address_reg], REGISTER_NAMES[address_reg]
+                    ));
+                } else {
+                     self.assembly.text.push_str(&format!(
+                        "\tmovl\t({}), {}\n",
+                         REGISTER_NAMES[address_reg], DWORD_REGISTER_NAMES[address_reg]
+                    ));
+                }
+            }
+            8 => self.assembly.text.push_str(&format!(
+                "\tmovq\t({}), {}\n",
+                REGISTER_NAMES[address_reg], REGISTER_NAMES[address_reg]
+            )),
+            _ => panic!("Cannot load type {:?} with size {} from memory address into register", ty_data, size)
+        }
+        address_reg
     }
 
     fn scale(&mut self, register: usize, value: u8) -> usize {
@@ -1019,32 +1174,28 @@ impl CodeGen {
         register
     }
 
-    fn store_dereference(&mut self, expr_node: usize, right_node: usize, ty: Type) -> usize {
-        let ty = match ty {
-            Type::Array { ty, .. } => ty.pointer_to(),
-            _ => ty,
-        };
-
-        match ty.value_at() {
-            Type::U8 => self.assembly.text.push_str(&format!(
+    // Renamed: store_memory. Stores value from value_register into memory at address_register.
+    // ty_at_address is the type of the data at the memory location.
+    fn store_memory(&mut self, value_register: usize, address_register: usize, ty_at_address: Type) {
+        match ty_at_address.size() {
+            1 => self.assembly.text.push_str(&format!(
                 "\tmovb\t{}, ({})\n",
-                BYTE_REGISTER_NAMES[expr_node], REGISTER_NAMES[right_node]
+                BYTE_REGISTER_NAMES[value_register], REGISTER_NAMES[address_register]
             )),
-            Type::U16 => self.assembly.text.push_str(&format!(
+            2 => self.assembly.text.push_str(&format!(
                 "\tmovw\t{}, ({})\n",
-                WORD_REGISTER_NAMES[expr_node], REGISTER_NAMES[right_node]
+                WORD_REGISTER_NAMES[value_register], REGISTER_NAMES[address_register]
             )),
-            Type::U32 => self.assembly.text.push_str(&format!(
+            4 => self.assembly.text.push_str(&format!(
                 "\tmovl\t{}, ({})\n",
-                DWORD_REGISTER_NAMES[expr_node], REGISTER_NAMES[right_node]
+                DWORD_REGISTER_NAMES[value_register], REGISTER_NAMES[address_register]
             )),
-            Type::U64 => self.assembly.text.push_str(&format!(
+            8 => self.assembly.text.push_str(&format!(
                 "\tmovq\t{}, ({})\n",
-                REGISTER_NAMES[expr_node], REGISTER_NAMES[right_node]
+                REGISTER_NAMES[value_register], REGISTER_NAMES[address_register]
             )),
-            _ => panic!("Unexpected type {:?}", ty),
+            _ => panic!("Unexpected type size {} for store_memory of type {:?}", ty_at_address.size(), ty_at_address),
         };
-        expr_node
     }
 
     fn define_string(&mut self, label: String, s: String) {
@@ -1296,13 +1447,22 @@ impl CodeGen {
                 "\tmovq\t{}(%rbp), {}\n",
                 offset, REGISTER_NAMES[r]
             ));
-        } else if let Type::Array { .. } = ty {
+        } else if matches!(ty, Type::Array { .. } | Type::Struct { .. } | Type::Union { .. }) {
+            // For arrays, structs, unions, load their base address
             self.assembly.text.push_str(&format!(
                 "\tleaq\t{}(%rbp), {}\n",
                 offset, REGISTER_NAMES[r]
             ));
-        } else {
-            panic!("Unexpected type {:?}", ty);
+        } else if matches!(ty, Type::Enum{..}) {
+             // Enums are loaded like their base integer type.
+             // Assuming I32 for enums as per Type definition for now.
+             self.assembly.text.push_str(&format!(
+                "\tmovl\t{}(%rbp), {}\n",
+                offset, DWORD_REGISTER_NAMES[r]
+            ));
+        }
+        else {
+            panic!("Unexpected type {:?} for load_local", ty);
         }
 
         r

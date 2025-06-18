@@ -1,0 +1,32 @@
+// Enum Declarations
+enum Color { Red, Green, Blue; } // Red=0, Green=1, Blue=2
+enum Status { Ok = 10, Err; }    // Ok=10, Err=11 (auto-incremented)
+enum Val { A=1; B=2; C; }       // A=1, B=2, C=3
+
+fn main() {
+    // Variable declaration and assignment
+    let c: Color;
+    let s: Status;
+
+    c = Color.Green;
+    s = Status.Err;
+    printint(c);
+    printint(s);
+
+    let s2: Status = Status.Ok;
+    printint(s2);
+
+    // Usage in expressions
+    let x: Val = Val.A;
+    let y: i32;
+    y = x + Val.B; // y = 1 + 2
+    printint(y);
+
+    let z: i32 = Val.C + 2; // z = 3 + 2
+    printint(z);
+
+    // Direct print of enum values
+    printint(Color.Red);
+    printint(Color.Blue);
+    printint(Val.C);
+}

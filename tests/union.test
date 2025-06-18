@@ -1,0 +1,37 @@
+// Union Declaration
+union Value {
+    i: i32;
+    f: u32; // Assuming i32 and u32 are same size (4 bytes)
+}
+
+union CharHolder {
+    i: i32;
+    c: char;
+}
+
+fn main() {
+    let v: Value;
+    // Assign to i, print f
+    // In two's complement, -1 is 0xFFFFFFFF
+    // As u32, this is 2^32 - 1 = 4294967295
+    v.i = -1;
+    printint(v.f);
+
+    // Assign to f, print i
+    v.f = 1000;
+    printint(v.i);
+
+    // Character in Union
+    let ch: CharHolder;
+    // Clear all bytes of the union by setting i to 0.
+    // This is important if char is smaller than i32 to avoid leftover bytes from previous stack values.
+    ch.i = 0;
+    ch.c = 'A'; // ASCII 65
+    printint(ch.c); // Expected: 65 (value of 'A')
+
+    // The representation of ch.i depends on endianness and size of char vs i32.
+    // If char is 1 byte and i32 is 4 bytes (little-endian):
+    // Memory: [65, 00, 00, 00]
+    // i32 value: 65
+    printint(ch.i);
+}

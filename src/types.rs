@@ -11,6 +11,21 @@ pub enum Type {
     Char,
     Array { ty: Box<Type>, count: u64 },
     Pointer { ty: Box<Type>, count: u64 },
+    Struct {
+        name: String,
+        fields: Vec<(String, Type)>,
+        size: usize,
+    },
+    Union {
+        name: String,
+        fields: Vec<(String, Type)>,
+        size: usize,
+    },
+    Enum {
+        name: String,
+        variants: Vec<(String, i64)>,
+        base_type: Box<Type>,
+    },
 }
 
 impl Type {
@@ -21,6 +36,9 @@ impl Type {
             Type::U32 | Type::I32 => 4,
             Type::U64 | Type::I64 | Type::Pointer { .. } => 8,
             Type::Array { ty, .. } => ty.size(),
+            Type::Struct { size, .. } => *size,
+            Type::Union { size, .. } => *size,
+            Type::Enum { base_type, .. } => base_type.size(),
         }
     }
 
@@ -99,6 +117,7 @@ impl Type {
                 | Type::I32
                 | Type::I64
                 | Type::Char
+                | Type::Enum { .. }
         )
     }
 
