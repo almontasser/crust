@@ -55,7 +55,8 @@ impl Parser {
                         token_type: TokenType::Identifier,
                         lexeme: Some(String::from("printint")),
                         line: 0,
-                        column: 0,
+                        start_column: 0,
+                        end_column: 0,
                         value: None,
                     },
                     structure: SymbolType::Function,
@@ -69,7 +70,8 @@ impl Parser {
                             token_type: TokenType::Identifier,
                             lexeme: Some(String::from("x")),
                             line: 0,
-                            column: 0,
+                            start_column: 0,
+                            end_column: 0,
                             value: None,
                         },
                         structure: SymbolType::Variable,
@@ -86,7 +88,8 @@ impl Parser {
                         token_type: TokenType::Identifier,
                         lexeme: Some(String::from("printchar")),
                         line: 0,
-                        column: 0,
+                        start_column: 0,
+                        end_column: 0,
                         value: None,
                     },
                     structure: SymbolType::Function,
@@ -100,7 +103,8 @@ impl Parser {
                             token_type: TokenType::Identifier,
                             lexeme: Some(String::from("x")),
                             line: 0,
-                            column: 0,
+                            start_column: 0,
+                            end_column: 0,
                             value: None,
                         },
                         structure: SymbolType::Variable,
@@ -352,7 +356,8 @@ impl Parser {
                 {
                     panic!(
                         "Expected comparison operator at line {} column {}",
-                        operator.line, operator.column
+                        operator.line,
+                        operator.start_column
                     );
                 }
             }
@@ -493,7 +498,8 @@ impl Parser {
             if temp_left.is_none() && temp_right.is_none() {
                 panic!(
                     "Incompatible types at line {} column {}",
-                    operator.line, operator.column
+                    operator.line,
+                    operator.start_column
                 );
             }
 
@@ -532,7 +538,8 @@ impl Parser {
             if temp_left.is_none() && temp_right.is_none() {
                 panic!(
                     "Incompatible types at line {} column {}",
-                    operator.line, operator.column
+                    operator.line,
+                    operator.start_column
                 );
             }
 
@@ -592,7 +599,8 @@ impl Parser {
                     token_type: TokenType::Ampersand,
                     lexeme: None,
                     line: self.previous(1).line,
-                    column: self.previous(1).column,
+                    start_column: self.previous(1).start_column,
+                    end_column: self.previous(1).end_column,
                     value: None,
                 },
                 right: Box::new(node.clone()),
@@ -619,7 +627,8 @@ impl Parser {
                                 token_type: TokenType::Mul,
                                 lexeme: None,
                                 line: self.previous(1).line,
-                                column: self.previous(1).column,
+                                start_column: self.previous(1).start_column,
+                                end_column: self.previous(1).end_column,
                                 value: None,
                             },
                             right: left.clone(),
@@ -631,7 +640,7 @@ impl Parser {
                 _ => panic!(
                     "Expected identifier at line {} column {}, got {:?}",
                     self.previous(1).line,
-                    self.previous(1).column,
+                    self.previous(1).start_column,
                     node
                 ),
             }
@@ -641,7 +650,8 @@ impl Parser {
                     token_type: TokenType::Mul,
                     lexeme: None,
                     line: self.previous(1).line,
-                    column: self.previous(1).column,
+                    start_column: self.previous(1).start_column,
+                    end_column: self.previous(1).end_column,
                     value: None,
                 },
                 right: Box::new(node.clone()),
@@ -693,7 +703,7 @@ impl Parser {
                         panic!(
                             "Expected function at line {} column {}",
                             identifier.line,
-                            identifier.column
+                            identifier.start_column
                         );
                     }
                     self.advance();
@@ -702,9 +712,9 @@ impl Parser {
                         panic!(
                             "Expected variable at line {} column {} got {:?}",
                             identifier.line,
-                            identifier.column,
+                            identifier.start_column,
                             symbol.borrow().structure
-                    );
+                        );
                 }
 
                 let left = if self.match_token(vec![TokenType::LeftBracket]) {
@@ -748,7 +758,7 @@ impl Parser {
                 "Variable {} not declared at line {} column {}",
                 identifier.lexeme.clone().unwrap(),
                 identifier.line,
-                identifier.column
+                identifier.start_column
             ),
         }
     }
@@ -798,7 +808,9 @@ impl Parser {
         let token = self.peek();
         panic!(
             "Unexpected token {:?} at line {} column {}",
-            token.token_type, token.line, token.column
+            token.token_type,
+            token.line,
+            token.start_column
         );
     }
 
@@ -824,7 +836,7 @@ impl Parser {
             "Expected {:?} at line {} column {}, got {:?}",
             tokens,
             self.peek().line,
-            self.peek().column,
+            self.peek().start_column,
             self.peek().token_type
         ))
     }
@@ -876,7 +888,7 @@ impl Parser {
                 ty,
                 identifier.lexeme.clone().unwrap(),
                 identifier.line,
-                identifier.column
+                identifier.start_column
             );
         }
 
@@ -925,7 +937,8 @@ impl Parser {
                 {
                     panic!(
                         "Expected comparison operator at line {} column {}",
-                        operator.line, operator.column
+                        operator.line,
+                        operator.start_column
                     );
                 }
             }
@@ -977,7 +990,8 @@ impl Parser {
                     {
                         panic!(
                             "Expected comparison operator at line {} column {}",
-                            operator.line, operator.column
+                            operator.line,
+                            operator.start_column
                         );
                     }
                 }
@@ -1077,7 +1091,7 @@ impl Parser {
                             "Function {} does not return a value at line {} column {}",
                             identifier.lexeme.clone().unwrap(),
                             identifier.line,
-                            identifier.column
+                            identifier.start_column
                         );
                     }
 
@@ -1088,7 +1102,7 @@ impl Parser {
                             "Function {} does not return a value at line {} column {}",
                             identifier.lexeme.clone().unwrap(),
                             identifier.line,
-                            identifier.column
+                            identifier.start_column
                         ),
                     }
                 }
@@ -1096,7 +1110,7 @@ impl Parser {
                     "Function {} does not return a value at line {} column {}",
                     identifier.lexeme.clone().unwrap(),
                     identifier.line,
-                    identifier.column
+                    identifier.start_column
                 ),
             }
         }
@@ -1195,7 +1209,7 @@ impl Parser {
                 "Function {} not declared at line {} column {}",
                 identifier.lexeme.clone().unwrap(),
                 identifier.line,
-                identifier.column
+                identifier.start_column
             );
         }
 
@@ -1203,7 +1217,8 @@ impl Parser {
         if symbol.borrow().structure != SymbolType::Function {
             panic!(
                 "Expected function at line {} column {}",
-                identifier.line, identifier.column
+                identifier.line,
+                identifier.start_column
             );
         }
 
@@ -1241,7 +1256,7 @@ impl Parser {
             None => panic!(
                 "Incompatible types at line {} column {}",
                 self.previous(1).line,
-                self.previous(1).column
+                self.previous(1).start_column
             ),
         };
 
@@ -1260,7 +1275,7 @@ impl Parser {
                 "Variable {} not declared at line {} column {}",
                 identifier.lexeme.clone().unwrap(),
                 identifier.line,
-                identifier.column
+                identifier.start_column
             );
         }
 
@@ -1269,7 +1284,7 @@ impl Parser {
             panic!(
                 "Expected variable at line {} column {} got {:?}",
                 identifier.line,
-                identifier.column,
+                identifier.start_column,
                 symbol.borrow().structure
             );
         }
@@ -1279,7 +1294,7 @@ impl Parser {
                 "Variable {} not declared at line {} column {}",
                 identifier.lexeme.clone().unwrap(),
                 identifier.line,
-                identifier.column
+                identifier.start_column
             )
         });
         let ty = symbol.borrow().ty.as_ref().unwrap().clone();
@@ -1296,7 +1311,7 @@ impl Parser {
             panic!(
                 "Expected integer at line {} column {}",
                 self.previous(1).line,
-                self.previous(1).column
+                self.previous(1).start_column
             );
         }
 
@@ -1305,7 +1320,7 @@ impl Parser {
             None => panic!(
                 "Incompatible types at line {} column {}",
                 self.previous(1).line,
-                self.previous(1).column
+                self.previous(1).start_column
             ),
         };
 
@@ -1315,7 +1330,8 @@ impl Parser {
                 token_type: TokenType::Add,
                 lexeme: None,
                 line: self.previous(1).line,
-                column: self.previous(1).column,
+                start_column: self.previous(1).start_column,
+                end_column: self.previous(1).end_column,
                 value: None,
             },
             right: Box::new(index),
@@ -1327,7 +1343,8 @@ impl Parser {
                 token_type: TokenType::Mul,
                 lexeme: None,
                 line: self.previous(1).line,
-                column: self.previous(1).column,
+                start_column: self.previous(1).start_column,
+                end_column: self.previous(1).end_column,
                 value: None,
             },
             right: Box::new(left.clone()),
