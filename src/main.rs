@@ -187,6 +187,53 @@ fn _print_node(node: Node, ident: u8) {
             println!("ToBool");
             _print_node(*expr, ident + 1);
         }
+        Node::FieldAccess { expr, field, .. } => {
+            println!("FieldAccess");
+            for _ in 0..=ident {
+                print!("  ");
+            }
+            println!("field: {:?}", field.lexeme);
+            _print_node(*expr, ident + 1);
+        }
+        Node::StructDecl { identifier, fields } => {
+            println!("StructDecl");
+            for _ in 0..=ident {
+                print!("  ");
+            }
+            println!("identifier: {:?}", identifier.lexeme);
+            for (field, ty) in fields {
+                for _ in 0..=ident + 1 {
+                    print!("  ");
+                }
+                println!("{:?}: {:?}", field.lexeme, ty);
+            }
+        }
+        Node::UnionDecl { identifier, fields } => {
+            println!("UnionDecl");
+            for _ in 0..=ident {
+                print!("  ");
+            }
+            println!("identifier: {:?}", identifier.lexeme);
+            for (field, ty) in fields {
+                for _ in 0..=ident + 1 {
+                    print!("  ");
+                }
+                println!("{:?}: {:?}", field.lexeme, ty);
+            }
+        }
+        Node::EnumDecl { identifier, variants } => {
+            println!("EnumDecl");
+            for _ in 0..=ident {
+                print!("  ");
+            }
+            println!("identifier: {:?}", identifier.lexeme);
+            for (name, val) in variants {
+                for _ in 0..=ident + 1 {
+                    print!("  ");
+                }
+                println!("{:?} = {}", name.lexeme, val);
+            }
+        }
     }
 }
 

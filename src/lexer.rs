@@ -43,6 +43,9 @@ pub enum TokenType {
     While,
     Char,
     Extern,
+    Struct,
+    Union,
+    Enum,
 
     // Single-character tokens
     Add,
@@ -60,6 +63,7 @@ pub enum TokenType {
     Colon,
     Ampersand,
     Comma,
+    Dot,
     LeftBracket,
     RightBracket,
     Or,
@@ -124,6 +128,9 @@ impl Lexer {
                 keywords.insert(String::from("while"), TokenType::While);
                 keywords.insert(String::from("char"), TokenType::Char);
                 keywords.insert(String::from("extern"), TokenType::Extern);
+                keywords.insert(String::from("struct"), TokenType::Struct);
+                keywords.insert(String::from("union"), TokenType::Union);
+                keywords.insert(String::from("enum"), TokenType::Enum);
                 keywords
             },
             string_labels: Vec::new(),
@@ -189,6 +196,7 @@ impl Lexer {
             ';' => self.add_token(TokenType::SemiColon),
             ':' => self.add_token(TokenType::Colon),
             ',' => self.add_token(TokenType::Comma),
+            '.' => self.add_token(TokenType::Dot),
             '[' => self.add_token(TokenType::LeftBracket),
             ']' => self.add_token(TokenType::RightBracket),
             '=' => {

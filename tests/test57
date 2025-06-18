@@ -1,0 +1,15 @@
+enum Fruits {
+  Apple = 1,
+  Banana,
+  Carrot,
+};
+
+fn main(): u32 {
+  let x: Fruits = Fruits.Banana;
+  if (x == Fruits.Banana) {
+    printint(1);
+  } else {
+    printint(0);
+  }
+  return 0;
+}

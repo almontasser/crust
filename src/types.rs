@@ -9,6 +9,9 @@ pub enum Type {
     I32,
     I64,
     Char,
+    Struct { name: String },
+    Union { name: String },
+    Enum { name: String },
     Array { ty: Box<Type>, count: u64 },
     Pointer { ty: Box<Type>, count: u64 },
 }
@@ -21,6 +24,7 @@ impl Type {
             Type::U32 | Type::I32 => 4,
             Type::U64 | Type::I64 | Type::Pointer { .. } => 8,
             Type::Array { ty, .. } => ty.size(),
+            _ => 0,
         }
     }
 
@@ -60,6 +64,18 @@ impl Type {
             },
             Type::Char => Type::Pointer {
                 ty: Box::new(Type::Char),
+                count: 1,
+            },
+            Type::Struct { name } => Type::Pointer {
+                ty: Box::new(Type::Struct { name: name.clone() }),
+                count: 1,
+            },
+            Type::Union { name } => Type::Pointer {
+                ty: Box::new(Type::Union { name: name.clone() }),
+                count: 1,
+            },
+            Type::Enum { name } => Type::Pointer {
+                ty: Box::new(Type::Enum { name: name.clone() }),
                 count: 1,
             },
             Type::Pointer { ty, count } => Type::Pointer {
