@@ -241,6 +241,12 @@ impl CodeGen {
                         }
                         _ => panic!("Unexpected token {:?}", left),
                     },
+                    Node::FieldAccess { .. } => {
+                        let register = self.generate_node(*expr.clone());
+                        self.free_register(register);
+                        self.assignment_depth -= 1;
+                        register
+                    }
                     _ => panic!("Unexpected token {:?}", left),
                 };
 
@@ -282,6 +288,13 @@ impl CodeGen {
             Node::PreIncStmt { right } => self.pre_inc_stmt(right),
             Node::PreDecStmt { right } => self.pre_dec_stmt(right),
             Node::ToBool { expr } => self.expr_to_bool(expr),
+            Node::FieldAccess { .. } => {
+                let r = self.allocate_register();
+                self.assembly
+                    .text
+                    .push_str(&format!("\tmovq\t$0, {}\n", REGISTER_NAMES[r]));
+                r
+            }
             Node::StructDecl { .. } | Node::UnionDecl { .. } | Node::EnumDecl { .. } => 0,
         }
     }

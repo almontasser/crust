@@ -855,7 +855,7 @@ impl Parser {
                     );
                 }
 
-                let left = if self.match_token(vec![TokenType::LeftBracket]) {
+                let mut left = if self.match_token(vec![TokenType::LeftBracket]) {
                     self.array_access()
                 } else {
                     Node::LiteralExpr {
@@ -863,6 +863,15 @@ impl Parser {
                         ty: symbol.borrow().ty.as_ref().unwrap().clone(),
                     }
                 };
+
+                while self.match_token(vec![TokenType::Dot]) {
+                    let field = self.expect(vec![TokenType::Identifier]).unwrap();
+                    left = Node::FieldAccess {
+                        expr: Box::new(left),
+                        field,
+                        ty: Type::U8,
+                    };
+                }
 
                 if self.match_token(vec![TokenType::Assign]) {
                     let expr = self.expression();

@@ -187,6 +187,14 @@ fn _print_node(node: Node, ident: u8) {
             println!("ToBool");
             _print_node(*expr, ident + 1);
         }
+        Node::FieldAccess { expr, field, .. } => {
+            println!("FieldAccess");
+            for _ in 0..=ident {
+                print!("  ");
+            }
+            println!("field: {:?}", field.lexeme);
+            _print_node(*expr, ident + 1);
+        }
         Node::StructDecl { identifier, fields } => {
             println!("StructDecl");
             for _ in 0..=ident {
