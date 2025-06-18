@@ -282,6 +282,7 @@ impl CodeGen {
             Node::PreIncStmt { right } => self.pre_inc_stmt(right),
             Node::PreDecStmt { right } => self.pre_dec_stmt(right),
             Node::ToBool { expr } => self.expr_to_bool(expr),
+            Node::StructDecl { .. } | Node::UnionDecl { .. } | Node::EnumDecl { .. } => 0,
         }
     }
 

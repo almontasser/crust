@@ -1,0 +1,10 @@
+struct Foo {
+  a: i32;
+  b: i32;
+};
+
+fn main(): u32 {
+  let x: Foo;
+  printint(42);
+  return 0;
+}

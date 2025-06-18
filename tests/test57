@@ -1,0 +1,11 @@
+enum Fruits {
+  Apple = 1,
+  Banana,
+  Carrot,
+};
+
+fn main(): u32 {
+  let x: Fruits;
+  printint(57);
+  return 0;
+}

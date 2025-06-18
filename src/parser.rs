@@ -11,6 +11,9 @@ use crate::{
 pub enum SymbolType {
     Function,
     Variable,
+    Struct,
+    Union,
+    Enum,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -131,6 +134,15 @@ impl Parser {
                 let node = self.var_decl(false);
                 self.expect(vec![TokenType::SemiColon]).unwrap();
                 self.nodes.push(node);
+            } else if self.check(TokenType::Struct) {
+                let node = self.struct_decl();
+                self.nodes.push(node);
+            } else if self.check(TokenType::Union) {
+                let node = self.union_decl();
+                self.nodes.push(node);
+            } else if self.check(TokenType::Enum) {
+                let node = self.enum_decl();
+                self.nodes.push(node);
             } else if self.check(TokenType::Fn) {
                 self.fn_decl(true);
             } else {
@@ -141,7 +153,6 @@ impl Parser {
         // second pass
         self.current = 0;
         while !self.is_at_end() {
-            // skip global variables since we already parsed it in the first pass
             if self.check(TokenType::Extern) {
                 self.extern_fn_decl(false);
                 continue;
@@ -149,6 +160,30 @@ impl Parser {
                 while !self.match_token(vec![TokenType::SemiColon]) {
                     self.advance();
                 }
+                continue;
+            } else if self.check(TokenType::Struct) {
+                // Skip over the struct declaration entirely
+                while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+                    self.advance();
+                }
+                self.match_token(vec![TokenType::RightBrace]);
+                self.match_token(vec![TokenType::SemiColon]);
+                continue;
+            } else if self.check(TokenType::Union) {
+                // Skip over the union declaration entirely
+                while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+                    self.advance();
+                }
+                self.match_token(vec![TokenType::RightBrace]);
+                self.match_token(vec![TokenType::SemiColon]);
+                continue;
+            } else if self.check(TokenType::Enum) {
+                // Skip over the enum declaration entirely
+                while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+                    self.advance();
+                }
+                self.match_token(vec![TokenType::RightBrace]);
+                self.match_token(vec![TokenType::SemiColon]);
                 continue;
             }
 
@@ -220,8 +255,10 @@ impl Parser {
             pointers_counter += 1
         }
 
-        let ty_token = self
-            .expect(vec![
+        let ty_token = if self.match_token(vec![TokenType::Identifier]) {
+            self.previous(1)
+        } else {
+            self.expect(vec![
                 TokenType::U8,
                 TokenType::U16,
                 TokenType::U32,
@@ -232,7 +269,8 @@ impl Parser {
                 TokenType::I64,
                 TokenType::Char,
             ])
-            .unwrap();
+            .unwrap()
+        };
 
         let (is_array, size) = if self.match_token(vec![TokenType::LeftBracket]) {
             let size_token = self.expect(vec![TokenType::Integer]).unwrap();
@@ -256,6 +294,22 @@ impl Parser {
             TokenType::I32 => Type::I32,
             TokenType::I64 => Type::I64,
             TokenType::Char => Type::Char,
+            TokenType::Identifier => {
+                let sym = self.find_symbol(ty_token.clone()).expect("Unknown type");
+                let kind = sym.borrow().structure.clone();
+                match kind {
+                    SymbolType::Struct => Type::Struct {
+                        name: ty_token.lexeme.clone().unwrap(),
+                    },
+                    SymbolType::Union => Type::Union {
+                        name: ty_token.lexeme.clone().unwrap(),
+                    },
+                    SymbolType::Enum => Type::Enum {
+                        name: ty_token.lexeme.clone().unwrap(),
+                    },
+                    _ => panic!("Unknown type"),
+                }
+            }
             _ => panic!("Expected type"),
         };
 
@@ -339,6 +393,94 @@ impl Parser {
                 is_local,
                 ty: ty.clone(),
             }
+        }
+    }
+
+    fn struct_decl(&mut self) -> Node {
+        self.expect(vec![TokenType::Struct]).unwrap();
+        let identifier = self.expect(vec![TokenType::Identifier]).unwrap();
+        self.expect(vec![TokenType::LeftBrace]).unwrap();
+        let mut fields = Vec::new();
+        while !self.check(TokenType::RightBrace) {
+            let field_id = self.expect(vec![TokenType::Identifier]).unwrap();
+            self.expect(vec![TokenType::Colon]).unwrap();
+            let ty = self.parse_type();
+            self.expect(vec![TokenType::SemiColon]).unwrap();
+            fields.push((field_id, ty));
+        }
+        self.expect(vec![TokenType::RightBrace]).unwrap();
+        self.expect(vec![TokenType::SemiColon]).unwrap();
+        self.add_symbol(
+            identifier.clone(),
+            SymbolType::Struct,
+            StorageClass::Global,
+            None,
+            None,
+            None,
+            None,
+        );
+        Node::StructDecl { identifier, fields }
+    }
+
+    fn union_decl(&mut self) -> Node {
+        self.expect(vec![TokenType::Union]).unwrap();
+        let identifier = self.expect(vec![TokenType::Identifier]).unwrap();
+        self.expect(vec![TokenType::LeftBrace]).unwrap();
+        let mut fields = Vec::new();
+        while !self.check(TokenType::RightBrace) {
+            let field_id = self.expect(vec![TokenType::Identifier]).unwrap();
+            self.expect(vec![TokenType::Colon]).unwrap();
+            let ty = self.parse_type();
+            self.expect(vec![TokenType::SemiColon]).unwrap();
+            fields.push((field_id, ty));
+        }
+        self.expect(vec![TokenType::RightBrace]).unwrap();
+        self.expect(vec![TokenType::SemiColon]).unwrap();
+        self.add_symbol(
+            identifier.clone(),
+            SymbolType::Union,
+            StorageClass::Global,
+            None,
+            None,
+            None,
+            None,
+        );
+        Node::UnionDecl { identifier, fields }
+    }
+
+    fn enum_decl(&mut self) -> Node {
+        self.expect(vec![TokenType::Enum]).unwrap();
+        let identifier = self.expect(vec![TokenType::Identifier]).unwrap();
+        self.expect(vec![TokenType::LeftBrace]).unwrap();
+        let mut value = 0u64;
+        let mut variants = Vec::new();
+        while !self.check(TokenType::RightBrace) {
+            let name = self.expect(vec![TokenType::Identifier]).unwrap();
+            if self.match_token(vec![TokenType::Assign]) {
+                let val = self.expect(vec![TokenType::Integer]).unwrap();
+                value = match val.value {
+                    Some(Literal::Integer(v)) => v,
+                    _ => 0,
+                };
+            }
+            variants.push((name, value));
+            value += 1;
+            self.match_token(vec![TokenType::Comma]);
+        }
+        self.expect(vec![TokenType::RightBrace]).unwrap();
+        self.expect(vec![TokenType::SemiColon]).unwrap();
+        self.add_symbol(
+            identifier.clone(),
+            SymbolType::Enum,
+            StorageClass::Global,
+            None,
+            None,
+            None,
+            None,
+        );
+        Node::EnumDecl {
+            identifier,
+            variants,
         }
     }
 
