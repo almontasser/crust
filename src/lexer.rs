@@ -14,7 +14,8 @@ pub struct Token {
     pub token_type: TokenType,
     pub lexeme: Option<String>,
     pub line: usize,
-    pub column: usize,
+    pub start_column: usize,
+    pub end_column: usize,
     pub value: Option<Literal>,
 }
 
@@ -88,6 +89,7 @@ pub struct Lexer {
     current: usize,
     line: usize,
     column: usize,
+    start_column: usize,
     keywords: HashMap<String, TokenType>,
     string_labels: Vec<String>,
     rng: RandomGenerator,
@@ -102,6 +104,7 @@ impl Lexer {
             current: 0,
             line: 1,
             column: 1,
+            start_column: 1,
             keywords: {
                 let mut keywords = HashMap::new();
                 keywords.insert(String::from("else"), TokenType::Else);
@@ -131,6 +134,7 @@ impl Lexer {
     pub fn scan_tokens(&mut self) -> &Vec<Token> {
         while !self.is_at_end() {
             self.start = self.current;
+            self.start_column = self.column;
             self.scan_token();
         }
 
@@ -138,7 +142,8 @@ impl Lexer {
             token_type: TokenType::Eof,
             lexeme: None,
             line: self.line,
-            column: self.column,
+            start_column: self.column,
+            end_column: self.column,
             value: None,
         });
 
@@ -264,7 +269,8 @@ impl Lexer {
             token_type,
             lexeme: Some(text.to_string()),
             line: self.line,
-            column: self.column,
+            start_column: self.start_column,
+            end_column: self.column - 1,
             value: none,
         });
     }
