@@ -1,9 +1,10 @@
 //! Parser module - Parses tokens into an AST with comprehensive error handling
 
-use crate::ast::{BinOp, Expr, Function, Program, Spanned, SpannedExpr, SpannedStmt, Stmt, UnaryOp};
+use crate::ast::{BinOp, Expr, Function, Parameter, Program, Spanned, SpannedExpr, SpannedStmt, Stmt, TypeAnnotation, UnaryOp};
 use crate::errors::{Diagnostic, DiagnosticCollector, DiagnosticEmitter, ErrorCode, Label};
 use crate::lexer::{Token, TokenKind};
 use crate::span::Span;
+use crate::types::Type;
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -138,7 +139,16 @@ impl Parser {
         if !self.check(&TokenKind::RParen) {
             loop {
                 let (param_name, param_span) = self.expect_identifier()?;
-                params.push((param_name, param_span));
+                
+                // Parse type annotation: param: Type
+                self.expect(TokenKind::Colon)?;
+                let type_annotation = self.parse_type_annotation()?;
+                
+                params.push(Parameter {
+                    name: param_name,
+                    name_span: param_span,
+                    type_annotation,
+                });
                 
                 if !self.match_token(&TokenKind::Comma) {
                     break;
@@ -157,6 +167,13 @@ impl Parser {
             return Err(());
         }
         self.advance(); // consume )
+        
+        // Parse optional return type: -> Type
+        let return_type = if self.match_token(&TokenKind::Arrow) {
+            Some(self.parse_type_annotation()?)
+        } else {
+            None
+        };
         
         let lbrace = self.expect(TokenKind::LBrace)?;
         
@@ -187,9 +204,51 @@ impl Parser {
             name,
             name_span,
             params,
+            return_type,
             body,
             span,
         })
+    }
+    
+    /// Parse a type annotation (e.g., i64, bool, str)
+    fn parse_type_annotation(&mut self) -> Result<TypeAnnotation, ()> {
+        let token = self.current().clone();
+        
+        match &token.kind {
+            TokenKind::Ident(type_name) => {
+                let ty = match type_name.as_str() {
+                    "i8" => Type::I8,
+                    "i16" => Type::I16,
+                    "i32" => Type::I32,
+                    "i64" => Type::I64,
+                    "i128" => Type::I128,
+                    "u8" => Type::U8,
+                    "u16" => Type::U16,
+                    "u32" => Type::U32,
+                    "u64" => Type::U64,
+                    "u128" => Type::U128,
+                    "bool" => Type::Bool,
+                    "str" => Type::Str,
+                    _ => {
+                        self.diagnostics.emit(
+                            Diagnostic::error(ErrorCode::UndefinedType, format!("unknown type '{}'", type_name))
+                                .with_label(Label::primary(token.span, "unknown type"))
+                                .with_note("available types: i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, bool, str")
+                        );
+                        return Err(());
+                    }
+                };
+                self.advance();
+                Ok(TypeAnnotation { ty, span: token.span })
+            }
+            _ => {
+                self.diagnostics.emit(
+                    Diagnostic::error(ErrorCode::ExpectedToken, format!("expected type, found {}", token.kind.description()))
+                        .with_label(Label::primary(token.span, "expected type"))
+                );
+                Err(())
+            }
+        }
     }
     
     fn parse_statement(&mut self) -> Result<SpannedStmt, ()> {
@@ -197,9 +256,17 @@ impl Parser {
         
         let stmt = if self.match_token(&TokenKind::Let) {
             let (name, name_span) = self.expect_identifier()?;
+            
+            // Parse optional type annotation: let x: i64 = ...
+            let type_annotation = if self.match_token(&TokenKind::Colon) {
+                Some(self.parse_type_annotation()?)
+            } else {
+                None
+            };
+            
             self.expect(TokenKind::Eq)?;
             let value = self.parse_expr()?;
-            Stmt::Let { name, name_span, value }
+            Stmt::Let { name, name_span, type_annotation, value }
         } else if self.match_token(&TokenKind::Return) {
             if self.check(&TokenKind::Semicolon) {
                 Stmt::Return(None)

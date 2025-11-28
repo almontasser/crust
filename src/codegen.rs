@@ -129,7 +129,7 @@ impl CodeGen {
             Stmt::Expr(expr) => {
                 self.generate_expr(expr)?;
             }
-            Stmt::Let { name, name_span, value } => {
+            Stmt::Let { name, name_span, type_annotation: _, value } => {
                 // For now, we don't support local variables
                 self.diagnostics.emit(
                     Diagnostic::error(ErrorCode::CodeGenError, "local variables not yet supported")

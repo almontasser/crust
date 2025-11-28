@@ -48,9 +48,20 @@ pub enum ErrorCode {
     UndefinedFunction,
     WrongArgumentCount,
     UndefinedVariable,
+    DuplicateDefinition,
     
     // Code generation errors (E0300 - E0399)
     CodeGenError,
+    
+    // Type errors (E0400 - E0499)
+    TypeMismatch,
+    UndefinedType,
+    InvalidOperandType,
+    InvalidUnaryOperand,
+    ReturnTypeMismatch,
+    MissingReturnValue,
+    ConditionNotBool,
+    InvalidMainSignature,
 }
 
 impl ErrorCode {
@@ -68,7 +79,16 @@ impl ErrorCode {
             ErrorCode::UndefinedFunction => "E0200",
             ErrorCode::WrongArgumentCount => "E0201",
             ErrorCode::UndefinedVariable => "E0202",
+            ErrorCode::DuplicateDefinition => "E0203",
             ErrorCode::CodeGenError => "E0300",
+            ErrorCode::TypeMismatch => "E0400",
+            ErrorCode::UndefinedType => "E0401",
+            ErrorCode::InvalidOperandType => "E0402",
+            ErrorCode::InvalidUnaryOperand => "E0403",
+            ErrorCode::ReturnTypeMismatch => "E0404",
+            ErrorCode::MissingReturnValue => "E0405",
+            ErrorCode::ConditionNotBool => "E0406",
+            ErrorCode::InvalidMainSignature => "E0407",
         }
     }
 }

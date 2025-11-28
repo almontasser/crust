@@ -6,11 +6,14 @@ mod errors;
 mod lexer;
 mod parser;
 mod span;
+mod types;
+mod typechecker;
 
 use codegen::CodeGen;
 use errors::ErrorReporter;
 use lexer::Lexer;
 use parser::Parser;
+use typechecker::TypeChecker;
 use std::env;
 use std::fs;
 use std::process::{Command, ExitCode};
@@ -64,6 +67,13 @@ fn main() -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    
+    // Type checking
+    let mut typechecker = TypeChecker::new();
+    if let Err(diagnostics) = typechecker.check_program(&program) {
+        reporter.report(&diagnostics);
+        return ExitCode::from(1);
+    }
     
     // Code generation
     let mut codegen = CodeGen::new();

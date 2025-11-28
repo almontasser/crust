@@ -1,6 +1,7 @@
 //! AST module - Abstract Syntax Tree definitions with span information
 
 use crate::span::Span;
+use crate::types::Type;
 
 #[derive(Debug, Clone)]
 pub struct Spanned<T> {
@@ -16,6 +17,21 @@ impl<T> Spanned<T> {
 
 pub type SpannedExpr = Spanned<Expr>;
 pub type SpannedStmt = Spanned<Stmt>;
+
+/// Type annotation in source code
+#[derive(Debug, Clone)]
+pub struct TypeAnnotation {
+    pub ty: Type,
+    pub span: Span,
+}
+
+/// Function parameter with name and type
+#[derive(Debug, Clone)]
+pub struct Parameter {
+    pub name: String,
+    pub name_span: Span,
+    pub type_annotation: TypeAnnotation,
+}
 
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -89,6 +105,7 @@ pub enum Stmt {
     Let {
         name: String,
         name_span: Span,
+        type_annotation: Option<TypeAnnotation>,
         value: SpannedExpr,
     },
     Return(Option<SpannedExpr>),
@@ -98,7 +115,8 @@ pub enum Stmt {
 pub struct Function {
     pub name: String,
     pub name_span: Span,
-    pub params: Vec<(String, Span)>,
+    pub params: Vec<Parameter>,
+    pub return_type: Option<TypeAnnotation>,
     pub body: Vec<SpannedStmt>,
     pub span: Span,
 }
