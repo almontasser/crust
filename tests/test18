@@ -1,9 +1,0 @@
-fn main(): u8
-{
-  let a: u8;
-  let b: u8;
-  a= b= 34;
-  printint(a);
-  printint(b);
-  return 0;
-}

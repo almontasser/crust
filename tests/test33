@@ -1,3 +1,0 @@
-fn main(): u32 {
-  let z: *char; return z;
-}
